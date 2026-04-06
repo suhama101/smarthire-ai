@@ -1,8 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
-const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../middleware/auth');
 
 jest.mock('../services/db', () => ({
   saveAnalysis: jest.fn(),
@@ -35,29 +33,20 @@ const { extractResumeData, matchJobDescription, generateLearningPlan } = require
 const { extractTextFromFile } = require('../services/resumeParser');
 const app = require('../server');
 
-function makeToken(userId = 'candidate-1') {
-  return jwt.sign({ sub: userId, email: `${userId}@example.com` }, JWT_SECRET, { expiresIn: '1h' });
-}
-
 describe('Analyze API', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  test('blocks unauthenticated resume uploads', async () => {
+  test('rejects resume uploads without a file', async () => {
     const response = await request(app)
-      .post('/api/analyze/resume')
-      .attach('resume', Buffer.from('hello world'), {
-        filename: 'resume.txt',
-        contentType: 'text/plain',
-      });
+      .post('/api/analyze/resume');
 
-    expect(response.status).toBe(401);
-    expect(response.body).toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ error: expect.stringContaining('Please upload a resume file') });
   });
 
-  test('uploads and analyzes a resume with a valid JWT', async () => {
-    const token = makeToken('candidate-1');
+  test('uploads and analyzes a resume without authentication', async () => {
     const rawText = 'Jane Doe is a backend engineer with JavaScript, Node.js, React, Docker, PostgreSQL, AWS, Git, testing, and CI/CD experience in production teams.';
 
     extractTextFromFile.mockResolvedValue(rawText);
@@ -73,7 +62,6 @@ describe('Analyze API', () => {
 
     const response = await request(app)
       .post('/api/analyze/resume')
-      .set('Authorization', `Bearer ${token}`)
       .attach('resume', Buffer.from('fake resume content'), {
         filename: 'resume.txt',
         contentType: 'text/plain',
@@ -87,11 +75,10 @@ describe('Analyze API', () => {
     });
     expect(extractTextFromFile).toHaveBeenCalled();
     expect(extractResumeData).toHaveBeenCalledWith(expect.stringContaining('Jane Doe'));
-    expect(saveAnalysis).toHaveBeenCalledWith('candidate-1', expect.any(Object), expect.stringContaining('Jane Doe'));
+    expect(saveAnalysis).toHaveBeenCalledWith('public-user', expect.any(Object), expect.stringContaining('Jane Doe'));
   });
 
-  test('returns a job match score for authenticated users', async () => {
-    const token = makeToken('candidate-2');
+  test('returns a job match score without authentication', async () => {
     const resumeData = {
       technicalSkills: ['JavaScript', 'React', 'Node.js'],
       frameworks: ['Express'],
@@ -123,7 +110,6 @@ describe('Analyze API', () => {
 
     const response = await request(app)
       .post('/api/analyze/match')
-      .set('Authorization', `Bearer ${token}`)
       .send({
         analysisId: 'analysis-123',
         jobTitle: 'Senior Full Stack Engineer',
@@ -135,7 +121,7 @@ describe('Analyze API', () => {
     expect(response.body.matchResult).toMatchObject(matchResult);
     expect(saveJobMatch).toHaveBeenCalledWith(
       'analysis-123',
-      'candidate-2',
+      'public-user',
       'Senior Full Stack Engineer',
       'SmartHire',
       expect.stringContaining('Docker'),
@@ -144,7 +130,6 @@ describe('Analyze API', () => {
   });
 
   test('generates a learning plan from missing skills', async () => {
-    const token = makeToken('candidate-3');
     const plan = {
       timelineWeeks: 8,
       priorities: [
@@ -166,7 +151,6 @@ describe('Analyze API', () => {
 
     const response = await request(app)
       .post('/api/analyze/learning-plan')
-      .set('Authorization', `Bearer ${token}`)
       .send({
         missingSkills: ['Docker', 'Kubernetes'],
         targetRole: 'Senior Full Stack Engineer',

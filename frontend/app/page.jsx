@@ -50,11 +50,6 @@ export default function HomePage() {
     ? rawApiUrl.replace(/\/$/, '')
     : (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
   const [health, setHealth] = useState('Checking API...');
-  const [token, setToken] = useState('');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [authError, setAuthError] = useState('');
   const [file, setFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
@@ -73,19 +68,8 @@ export default function HomePage() {
   const [learningPlanError, setLearningPlanError] = useState('');
   const [learningPlanResult, setLearningPlanResult] = useState(null);
 
-  function getAuthHeaders() {
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('smarthire_jwt') : '';
-    const activeToken = token || stored || '';
-    return activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
-  }
-
   useEffect(() => {
     let mounted = true;
-
-    const storedToken = typeof window !== 'undefined' ? window.localStorage.getItem('smarthire_jwt') : '';
-    if (storedToken) {
-      setToken(storedToken);
-    }
 
     axios
       .get(`${apiUrl}/api/health`)
@@ -107,56 +91,8 @@ export default function HomePage() {
     };
   }, [apiUrl]);
 
-  async function handleLogin(event) {
-    event.preventDefault();
-
-    if (!loginEmail.trim() || !loginPassword.trim()) {
-      setAuthError('Email and password are required.');
-      return;
-    }
-
-    setAuthError('');
-    setIsLoggingIn(true);
-
-    try {
-      const response = await axios.post(`${apiUrl}/api/auth/login`, {
-        email: loginEmail.trim(),
-        password: loginPassword,
-      });
-
-      const nextToken = response?.data?.token || '';
-      if (!nextToken) {
-        throw new Error('Login response did not include a token.');
-      }
-
-      window.localStorage.setItem('smarthire_jwt', nextToken);
-      setToken(nextToken);
-      setLoginPassword('');
-    } catch (err) {
-      const message = err?.response?.data?.error || err?.message || 'Login failed.';
-      setAuthError(message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  }
-
-  function handleLogout() {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('smarthire_jwt');
-    }
-    setToken('');
-    setAnalysisResult(null);
-    setMatchResult(null);
-    setLearningPlanResult(null);
-  }
-
   async function handleUpload(event) {
     event.preventDefault();
-
-    if (!token && typeof window !== 'undefined' && !window.localStorage.getItem('smarthire_jwt')) {
-      setAnalysisError('Please login first.');
-      return;
-    }
 
     if (!file) {
       setAnalysisError('Please choose a resume file first.');
@@ -179,7 +115,6 @@ export default function HomePage() {
       const response = await axios.post(`${apiUrl}/api/analyze/resume`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          ...getAuthHeaders(),
         },
         timeout: 120000,
       });
@@ -196,11 +131,6 @@ export default function HomePage() {
 
   async function handleMatchJob(event) {
     event.preventDefault();
-
-    if (!token && typeof window !== 'undefined' && !window.localStorage.getItem('smarthire_jwt')) {
-      setMatchError('Please login first.');
-      return;
-    }
 
     const analysisId = analysisResult?.analysisId;
     if (!analysisId) {
@@ -226,10 +156,6 @@ export default function HomePage() {
         jobTitle,
         companyName,
         jobDescription,
-      }, {
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       setMatchResult(response.data?.matchResult || null);
@@ -243,11 +169,6 @@ export default function HomePage() {
 
   async function handleGenerateLearningPlan(event) {
     event.preventDefault();
-
-    if (!token && typeof window !== 'undefined' && !window.localStorage.getItem('smarthire_jwt')) {
-      setLearningPlanError('Please login first.');
-      return;
-    }
 
     if (!matchResult?.missingSkills || matchResult.missingSkills.length === 0) {
       setLearningPlanError('No missing skills to create a learning plan.');
@@ -268,10 +189,6 @@ export default function HomePage() {
         missingSkills: matchResult.missingSkills,
         targetRole: targetRole.trim(),
         yearsExperience: analysisResult?.resumeData?.yearsExperience || 1,
-      }, {
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       setLearningPlanResult(response.data?.learningPlan || null);
@@ -314,55 +231,6 @@ export default function HomePage() {
             </div>
           </div>
         </header>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Authentication</h2>
-              <p className="mt-1 text-sm text-slate-500">Login to get a JWT and unlock protected analysis endpoints.</p>
-            </div>
-            {token ? (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Logout
-              </button>
-            ) : null}
-          </div>
-
-          {!token ? (
-            <form onSubmit={handleLogin} className="mt-4 grid gap-3 md:grid-cols-3">
-              <input
-                type="email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="Email"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              />
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="Password"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              />
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isLoggingIn ? 'Logging in...' : 'Login'}
-              </button>
-              {authError ? (
-                <p className="md:col-span-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{authError}</p>
-              ) : null}
-            </form>
-          ) : (
-            <p className="mt-3 text-sm text-slate-600">Authenticated. JWT is stored in localStorage as <span className="font-mono">smarthire_jwt</span>.</p>
-          )}
-        </section>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

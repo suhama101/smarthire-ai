@@ -1,11 +1,11 @@
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
 const { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured } = require('../services/claudeService');
 const { saveAnalysis, getAnalysisById, saveJobMatch, deleteAnalysisById, deleteJobMatchById } = require('../services/db');
 
 const router = express.Router();
+const DEFAULT_USER_ID = 'public-user';
 
 function previewText(value, maxLength = 2500) {
   const text = String(value || '');
@@ -26,8 +26,9 @@ router.get('/', (req, res) => {
 
 // POST /api/analyze/resume
 // Upload and analyze a resume with Claude AI
-router.post('/resume', requireAuth, upload.single('resume'), async (req, res, next) => {
+router.post('/resume', upload.single('resume'), async (req, res, next) => {
   let filePath = null;
+  const userId = req.user?.id || DEFAULT_USER_ID;
 
   try {
     if (!req.file) {
@@ -36,7 +37,7 @@ router.post('/resume', requireAuth, upload.single('resume'), async (req, res, ne
 
     filePath = req.file.path;
     console.info('[analyze/resume] upload received', {
-      userId: req.user.id,
+      userId,
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
@@ -62,7 +63,7 @@ router.post('/resume', requireAuth, upload.single('resume'), async (req, res, ne
     const resumeData = await extractResumeData(cleanedText);
 
     // Step 3: Save to database
-    const analysis = await saveAnalysis(req.user.id, resumeData, cleanedText);
+    const analysis = await saveAnalysis(userId, resumeData, cleanedText);
 
     // Cleanup uploaded file
     deleteFile(filePath);
@@ -91,8 +92,9 @@ router.post('/resume', requireAuth, upload.single('resume'), async (req, res, ne
 
 // POST /api/analyze/match
 // Match a previously analyzed resume against a job description
-router.post('/match', requireAuth, async (req, res, next) => {
+router.post('/match', async (req, res, next) => {
   try {
+    const userId = req.user?.id || DEFAULT_USER_ID;
     const { analysisId, jobTitle, companyName, jobDescription } = req.body;
 
     if (!analysisId || !jobDescription) {
@@ -100,7 +102,7 @@ router.post('/match', requireAuth, async (req, res, next) => {
     }
 
     console.info('[analyze/match] request received', {
-      userId: req.user.id,
+      userId,
       analysisId,
       jobTitle,
       companyName,
@@ -114,7 +116,7 @@ router.post('/match', requireAuth, async (req, res, next) => {
     }
 
     // Get the resume analysis
-    const analysis = await getAnalysisById(analysisId, req.user.id);
+    const analysis = await getAnalysisById(analysisId, userId);
     if (!analysis) {
       return res.status(404).json({ error: 'Resume analysis not found.' });
     }
@@ -124,7 +126,7 @@ router.post('/match', requireAuth, async (req, res, next) => {
     // Save the match
     const jobMatch = await saveJobMatch(
       analysisId,
-      req.user.id,
+      userId,
       jobTitle || 'Unknown Role',
       companyName || 'Unknown Company',
       jobDescription,
@@ -153,8 +155,9 @@ router.post('/match', requireAuth, async (req, res, next) => {
 
 // POST /api/analyze/learning-plan
 // Generate personalized learning plan for missing skills
-router.post('/learning-plan', requireAuth, async (req, res, next) => {
+router.post('/learning-plan', async (req, res, next) => {
   try {
+    const userId = req.user?.id || DEFAULT_USER_ID;
     const { missingSkills, targetRole, yearsExperience } = req.body;
 
     if (!missingSkills || !Array.isArray(missingSkills) || missingSkills.length === 0) {
@@ -162,7 +165,7 @@ router.post('/learning-plan', requireAuth, async (req, res, next) => {
     }
 
     console.info('[analyze/learning-plan] request received', {
-      userId: req.user.id,
+      userId,
       missingSkills,
       targetRole,
       yearsExperience,
@@ -195,14 +198,15 @@ router.post('/learning-plan', requireAuth, async (req, res, next) => {
 
 // DELETE /api/analyze/analysis/:analysisId
 // Delete a resume analysis for the current user
-router.delete('/analysis/:analysisId', requireAuth, async (req, res, next) => {
+router.delete('/analysis/:analysisId', async (req, res, next) => {
   try {
+    const userId = req.user?.id || DEFAULT_USER_ID;
     const { analysisId } = req.params;
     if (!analysisId) {
       return res.status(400).json({ error: 'analysisId is required.' });
     }
 
-    const deleted = await deleteAnalysisById(analysisId, req.user.id);
+    const deleted = await deleteAnalysisById(analysisId, userId);
     if (!deleted) {
       return res.status(404).json({ error: 'Resume analysis not found.' });
     }
@@ -215,14 +219,15 @@ router.delete('/analysis/:analysisId', requireAuth, async (req, res, next) => {
 
 // DELETE /api/analyze/match/:matchId
 // Delete a stored match result for the current user
-router.delete('/match/:matchId', requireAuth, async (req, res, next) => {
+router.delete('/match/:matchId', async (req, res, next) => {
   try {
+    const userId = req.user?.id || DEFAULT_USER_ID;
     const { matchId } = req.params;
     if (!matchId) {
       return res.status(400).json({ error: 'matchId is required.' });
     }
 
-    const deleted = await deleteJobMatchById(matchId, req.user.id);
+    const deleted = await deleteJobMatchById(matchId, userId);
     if (!deleted) {
       return res.status(404).json({ error: 'Job match not found.' });
     }
