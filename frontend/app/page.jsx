@@ -46,9 +46,8 @@ function clampScore(value) {
 
 export default function HomePage() {
   const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-  const apiUrl = rawApiUrl
-    ? rawApiUrl.replace(/\/$/, '')
-    : (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+  const apiUrl = rawApiUrl.trim().replace(/\/$/, '');
+  const hasApiUrl = apiUrl.length > 0;
   const [health, setHealth] = useState('Checking API...');
   const [file, setFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -71,6 +70,13 @@ export default function HomePage() {
   useEffect(() => {
     let mounted = true;
 
+    if (!hasApiUrl) {
+      setHealth('API URL is missing. Set NEXT_PUBLIC_API_URL in your environment.');
+      return () => {
+        mounted = false;
+      };
+    }
+
     axios
       .get(`${apiUrl}/api/health`)
       .then((data) => {
@@ -83,16 +89,21 @@ export default function HomePage() {
         if (!mounted) {
           return;
         }
-        setHealth('API is not reachable. Ensure backend runs on port 5000.');
+        setHealth('API is not reachable. Verify backend deployment URL and CORS settings.');
       });
 
     return () => {
       mounted = false;
     };
-  }, [apiUrl]);
+  }, [apiUrl, hasApiUrl]);
 
   async function handleUpload(event) {
     event.preventDefault();
+
+    if (!hasApiUrl) {
+      setAnalysisError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
+      return;
+    }
 
     if (!file) {
       setAnalysisError('Please choose a resume file first.');
@@ -132,6 +143,11 @@ export default function HomePage() {
   async function handleMatchJob(event) {
     event.preventDefault();
 
+    if (!hasApiUrl) {
+      setMatchError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
+      return;
+    }
+
     const analysisId = analysisResult?.analysisId;
     if (!analysisId) {
       setMatchError('Analyze a resume first to get analysisId.');
@@ -169,6 +185,11 @@ export default function HomePage() {
 
   async function handleGenerateLearningPlan(event) {
     event.preventDefault();
+
+    if (!hasApiUrl) {
+      setLearningPlanError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
+      return;
+    }
 
     if (!matchResult?.missingSkills || matchResult.missingSkills.length === 0) {
       setLearningPlanError('No missing skills to create a learning plan.');

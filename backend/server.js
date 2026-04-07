@@ -17,6 +17,10 @@ const PORT = Number(process.env.PORT) || 5000;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+function normalizeOrigin(origin) {
+	return String(origin || '').trim().replace(/\/$/, '');
+}
+
 
 
 function getAllowedOrigins() {
@@ -31,7 +35,7 @@ function getAllowedOrigins() {
 
 
 
-	return rawOrigins.split(',').map((origin) => origin.trim()).filter(Boolean);
+	return rawOrigins.split(',').map((origin) => normalizeOrigin(origin)).filter(Boolean);
 
 }
 
@@ -46,6 +50,7 @@ app.disable('x-powered-by');
 const allowedOrigins = getAllowedOrigins();
 
 app.use(cors({
+	credentials: false,
 
 	origin(origin, callback) {
 
@@ -57,7 +62,9 @@ app.use(cors({
 
 
 
-		if (allowedOrigins.includes(origin)) {
+		const normalizedOrigin = normalizeOrigin(origin);
+
+		if (allowedOrigins.includes(normalizedOrigin)) {
 
 			return callback(null, true);
 
