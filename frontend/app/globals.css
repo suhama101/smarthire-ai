@@ -67,7 +67,6 @@ a {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
-.smarthire-dark .shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)],
-.smarthire-dark .shadow-[0_20px_60px_-30px_rgba(15,23,42,0.55)] {
+.smarthire-dark [class*="shadow-"] {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
