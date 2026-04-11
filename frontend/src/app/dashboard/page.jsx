@@ -199,7 +199,7 @@ export default function DashboardPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-slate-600">AI-powered hiring insights dashboard</p>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Analytics Dashboard</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">SmartHire AI Dashboard</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">AI-powered hiring insights dashboard</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             View hiring analytics, score trends, skill gaps, and matched skills in one professional summary.
           </p>
