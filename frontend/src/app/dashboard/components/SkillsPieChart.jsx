@@ -5,8 +5,8 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recha
 const PIE_COLORS = ['#0f172a', '#334155', '#64748b', '#94a3b8', '#cbd5e1'];
 
 const chartStyles = {
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
+  background: '#1a1a24',
+  border: '1px solid #2a2a38',
   borderRadius: 16,
 };
 
@@ -16,8 +16,8 @@ export default function SkillsPieChart({ data = [] }) {
       {data.length ? (
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Tooltip contentStyle={chartStyles} labelStyle={{ color: '#0f172a', fontWeight: 600 }} />
-            <Legend />
+            <Tooltip contentStyle={chartStyles} labelStyle={{ color: '#f1f1f3', fontWeight: 600 }} />
+            <Legend wrapperStyle={{ color: '#f1f1f3' }} />
             <Pie
               data={data}
               dataKey="value"

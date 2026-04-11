@@ -6,12 +6,68 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: #0f0f13;
+  color: #f1f1f3;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(79, 70, 229, 0.35);
+  color: #f1f1f3;
+}
+
+button,
+input,
+textarea,
+select,
+a {
+  transition: all 200ms ease;
+}
+
+.smarthire-dark .bg-white,
+.smarthire-dark .bg-white\/90,
+.smarthire-dark .bg-white\/95 {
+  background-color: #1a1a24 !important;
+}
+
+.smarthire-dark .bg-slate-50,
+.smarthire-dark .bg-slate-100,
+.smarthire-dark .bg-slate-200,
+.smarthire-dark .bg-slate-300 {
+  background-color: #0f0f13 !important;
+}
+
+.smarthire-dark .border-slate-200,
+.smarthire-dark .border-slate-300,
+.smarthire-dark .border-white\/8,
+.smarthire-dark .border-white\/10 {
+  border-color: #2a2a38 !important;
+}
+
+.smarthire-dark .text-slate-900,
+.smarthire-dark .text-slate-800,
+.smarthire-dark .text-slate-700 {
+  color: #f1f1f3 !important;
+}
+
+.smarthire-dark .text-slate-600,
+.smarthire-dark .text-slate-500,
+.smarthire-dark .text-slate-400 {
+  color: #8b8b9e !important;
+}
+
+.smarthire-dark .shadow-sm,
+.smarthire-dark .shadow,
+.smarthire-dark .shadow-md {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+}
+
+.smarthire-dark .shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)],
+.smarthire-dark .shadow-[0_20px_60px_-30px_rgba(15,23,42,0.55)] {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }

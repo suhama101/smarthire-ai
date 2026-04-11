@@ -510,7 +510,7 @@ export default function HomePage() {
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">Talent Operations Console</span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">{workspaceTitle}</span>
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-4xl">Executive Hiring Dashboard</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-4xl">AI-Powered Hiring Intelligence</h1>
               <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-base">{workspaceTagline}</p>
             </div>
             <div className="flex flex-col gap-3 lg:min-w-[420px]">

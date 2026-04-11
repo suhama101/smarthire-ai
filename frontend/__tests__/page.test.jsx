@@ -27,7 +27,7 @@ describe('HomePage', () => {
   test('renders the dashboard shell and health status', async () => {
     render(<HomePage />);
 
-    expect(screen.getByText('Executive Hiring Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('AI-Powered Hiring Intelligence')).toBeInTheDocument();
     expect(screen.queryByText('Authentication')).not.toBeInTheDocument();
 
     await waitFor(() => {

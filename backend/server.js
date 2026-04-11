@@ -22,6 +22,15 @@ function normalizeOrigin(origin) {
 	return String(origin || '').trim().replace(/\/$/, '');
 }
 
+function isLocalDevelopmentOrigin(origin) {
+	try {
+		const url = new URL(origin);
+		return ['localhost', '127.0.0.1'].includes(url.hostname);
+	} catch {
+		return false;
+	}
+}
+
 
 
 function getAllowedOrigins() {
@@ -66,6 +75,12 @@ app.use(cors({
 		const normalizedOrigin = normalizeOrigin(origin);
 
 		if (allowedOrigins.includes(normalizedOrigin)) {
+
+			return callback(null, true);
+
+		}
+
+		if (NODE_ENV !== 'production' && isLocalDevelopmentOrigin(normalizedOrigin)) {
 
 			return callback(null, true);
 

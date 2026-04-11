@@ -3,8 +3,8 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const chartStyles = {
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
+  background: '#1a1a24',
+  border: '1px solid #2a2a38',
   borderRadius: 16,
 };
 
@@ -14,11 +14,11 @@ export default function SkillGapChart({ data = [] }) {
       {data.length ? (
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="label" stroke="#64748b" tickLine={false} axisLine={false} />
-            <YAxis stroke="#64748b" tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={chartStyles} labelStyle={{ color: '#0f172a', fontWeight: 600 }} />
-            <Legend />
+            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a38" />
+            <XAxis dataKey="label" stroke="#8b8b9e" tickLine={false} axisLine={false} />
+            <YAxis stroke="#8b8b9e" tickLine={false} axisLine={false} />
+            <Tooltip contentStyle={chartStyles} labelStyle={{ color: '#f1f1f3', fontWeight: 600 }} />
+            <Legend wrapperStyle={{ color: '#f1f1f3' }} />
             <Bar dataKey="count" name="Skill gaps" fill="#334155" radius={[12, 12, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

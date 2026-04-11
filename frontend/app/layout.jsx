@@ -15,7 +15,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={manrope.className}>
+      <body className={`smarthire-dark ${manrope.className}`}>
         <AuthenticatedShell>{children}</AuthenticatedShell>
       </body>
     </html>
