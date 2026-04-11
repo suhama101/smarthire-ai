@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express');
 
@@ -8,6 +8,7 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
 const analyzeRoutes = require('./routes/analyze');
+const debugRoutes = require('./routes/debug');
 
 const { isAnthropicConfigured } = require('./services/claudeService');
 
@@ -125,6 +126,10 @@ app.use('/api/auth', authRoutes);
 
 
 app.use('/api/analyze', analyzeRoutes);
+
+
+
+app.use('/api/debug', debugRoutes);
 
 
 

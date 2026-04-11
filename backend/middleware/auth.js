@@ -1,39 +1,33 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'smarthire-dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'smarthire_dev_secret';
 
-function requireAuth(req, res, next) {
-  const authorization = String(req.header('authorization') || '').trim();
-  const [scheme, token] = authorization.split(' ');
-
-  if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({
-      error: 'Authentication required. Please provide a valid JWT.',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
+const authMiddleware = (req, res, next) => {
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = {
-      id: payload.sub || payload.userId || payload.id || payload.email,
-      email: payload.email || null,
-    };
+    const authHeader = req.headers.authorization;
 
-    if (!req.user.id) {
-      return res.status(401).json({
-        error: 'Authentication required. Please provide a valid JWT.',
-        code: 'UNAUTHORIZED',
-      });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided. Please login.' });
     }
 
-    return next();
-  } catch (err) {
-    return res.status(401).json({
-      error: 'Authentication required. Please provide a valid JWT.',
-      code: 'UNAUTHORIZED',
-    });
-  }
-}
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
 
-module.exports = { requireAuth, JWT_SECRET };
+    req.user = decoded; // { id, email, role }
+    next();
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired. Please login again.' });
+    }
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+};
+
+const requireRole = (role) => (req, res, next) => {
+  if (req.user?.role !== role) {
+    return res.status(403).json({ error: `Access denied. Requires role: ${role}` });
+  }
+  next();
+};
+
+module.exports = { authMiddleware, requireRole };

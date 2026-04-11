@@ -24,6 +24,9 @@ function createMemoryClient() {
       filters: [],
       countMode: null,
       head: false,
+      orderColumn: null,
+      orderAscending: true,
+      limitCount: null,
     };
 
     return {
@@ -46,6 +49,15 @@ function createMemoryClient() {
       },
       eq(column, value) {
         state.filters.push({ column, value });
+        return this;
+      },
+      order(column, options = {}) {
+        state.orderColumn = column;
+        state.orderAscending = options.ascending !== false;
+        return this;
+      },
+      limit(count) {
+        state.limitCount = Number(count) || null;
         return this;
       },
       async single() {
@@ -76,7 +88,25 @@ function createMemoryClient() {
         }
 
         const matcher = makeFilterMatcher(state.filters);
-        const filtered = rows.filter(matcher);
+        let filtered = rows.filter(matcher);
+
+        if (state.orderColumn) {
+          filtered = [...filtered].sort((left, right) => {
+            const leftValue = left?.[state.orderColumn];
+            const rightValue = right?.[state.orderColumn];
+
+            if (leftValue === rightValue) {
+              return 0;
+            }
+
+            const direction = state.orderAscending ? 1 : -1;
+            return leftValue > rightValue ? direction : -direction;
+          });
+        }
+
+        if (state.limitCount) {
+          filtered = filtered.slice(0, state.limitCount);
+        }
 
         if (state.countMode === 'exact' && state.head) {
           return { data: null, count: filtered.length, error: null };
@@ -88,6 +118,7 @@ function createMemoryClient() {
   }
 
   return {
+    __isMemory: true,
     from(table) {
       return createBuilder(table);
     },
@@ -106,6 +137,7 @@ function getSupabaseClient() {
 
   if (url && key) {
     cachedClient = createClient(url, key);
+    cachedClient.__isMemory = false;
     return cachedClient;
   }
 

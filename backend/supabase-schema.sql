@@ -1,6 +1,17 @@
 -- SmartHire AI Supabase schema
 -- Run this in the Supabase SQL Editor for your project.
 
+create table if not exists public.users (
+  id text primary key,
+  email text not null unique,
+  password_hash text not null,
+  full_name text not null,
+  role text not null default 'candidate',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists users_email_idx on public.users(email);
+
 create table if not exists public.analyses (
   id text primary key,
   user_id text not null,
