@@ -31,75 +31,60 @@ function isLocalDevelopmentOrigin(origin) {
 	}
 }
 
+function shouldAllowLocalhostFallback(rawOrigins) {
+	if (!rawOrigins) {
+		return true;
+	}
 
+	return rawOrigins
+		.split(',')
+		.map((origin) => normalizeOrigin(origin))
+		.some((origin) => origin.includes('your-frontend.example.com'));
+}
 
 function getAllowedOrigins() {
-
 	const rawOrigins = String(process.env.CORS_ORIGINS || '').trim();
 
 	if (!rawOrigins) {
-
 		return NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
-
 	}
 
-
-
 	return rawOrigins.split(',').map((origin) => normalizeOrigin(origin)).filter(Boolean);
-
 }
-
-
 
 const app = express();
 
 app.disable('x-powered-by');
 
-
+const rawCorsOrigins = String(process.env.CORS_ORIGINS || '').trim();
 
 const allowedOrigins = getAllowedOrigins();
 
+const allowLocalhostFallback = shouldAllowLocalhostFallback(rawCorsOrigins);
+
 app.use(cors({
 	credentials: false,
-
 	origin(origin, callback) {
-
 		if (!origin) {
-
 			return callback(null, true);
-
 		}
-
-
 
 		const normalizedOrigin = normalizeOrigin(origin);
 
 		if (allowedOrigins.includes(normalizedOrigin)) {
-
 			return callback(null, true);
-
 		}
 
-		if (NODE_ENV !== 'production' && isLocalDevelopmentOrigin(normalizedOrigin)) {
-
+		if (allowLocalhostFallback && isLocalDevelopmentOrigin(normalizedOrigin)) {
 			return callback(null, true);
-
 		}
-
-
 
 		if (NODE_ENV !== 'production' && allowedOrigins.length === 0) {
-
 			return callback(null, true);
-
 		}
 
-
-
 		return callback(new Error('CORS origin not allowed'));
-
 	},
-
 }));
 
 app.use(express.json({ limit: '10mb' }));
