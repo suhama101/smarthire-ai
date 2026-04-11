@@ -110,7 +110,7 @@ export default function DashboardPage() {
       }
 
       try {
-        const response = await axios.get(`${cleanedApiUrl}/api/history/dashboard-stats`);
+        const response = await axios.get(`${cleanedApiUrl}/api/history/stats`);
 
         if (!isMounted) {
           return;
@@ -197,6 +197,7 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-medium text-slate-600">AI-powered hiring insights dashboard</p>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Analytics Dashboard</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">SmartHire AI Dashboard</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
