@@ -53,7 +53,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="space-y-6">
+    <div className="space-y-6">
       <Card
         header={
           <div className="flex items-center gap-2 text-sm font-medium text-[#8B8B9E]">
@@ -147,6 +147,6 @@ export default function HistoryPage() {
           </div>
         </div>
       </Card>
-    </main>
+    </div>
   );
 }

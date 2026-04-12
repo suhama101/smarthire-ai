@@ -29,7 +29,7 @@ const upload = multer({
   storage,
   limits: {
     fileSize: MAX_UPLOAD_MB * 1024 * 1024,
-    files: 1,
+    files: 20,
   },
   fileFilter: (req, file, cb) => {
     if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
@@ -43,4 +43,6 @@ const upload = multer({
   },
 });
 
-module.exports = { upload };
+const uploadBatch = upload.array('resumes', 20);
+
+module.exports = { upload, uploadBatch };

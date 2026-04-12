@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AlertCircle, FileText, RefreshCw, Target, Users } from 'lucide-react';
 import axios from 'axios';
 import ScoreTrendChart from './components/ScoreTrendChart';
 import SkillGapChart from './components/SkillGapChart';
@@ -73,12 +75,17 @@ function normalizePieData(series) {
   return [];
 }
 
+function isZeroLikeMetric(value) {
+  return value === '--' || Number(value) === 0;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const stored = readStoredAuth();
@@ -100,6 +107,11 @@ export default function DashboardPage() {
     async function loadDashboardStats() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const cleanedApiUrl = apiUrl.trim().replace(/\/$/, '');
+
+      if (isMounted) {
+        setLoading(true);
+        setError('');
+      }
 
       if (!cleanedApiUrl) {
         if (isMounted) {
@@ -137,7 +149,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshKey]);
 
   const summaryCards = useMemo(() => {
     if (!stats) {
@@ -183,66 +195,148 @@ export default function DashboardPage() {
     [stats],
   );
 
+  const hasInsights = summaryCards.some((card) => !isZeroLikeMetric(card.value));
+  const todayLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date());
+
+  function handleRefresh() {
+    setRefreshKey((current) => current + 1);
+  }
+
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-6">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-600">Redirecting to sign in...</p>
+      <div className="px-4 py-8 md:px-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#1A1A24] p-6 shadow-sm">
+          <p className="text-sm font-medium text-[#8B8B9E]">Redirecting to sign in...</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-6">
+    <div className="space-y-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-600">AI-powered hiring insights dashboard</p>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Analytics Dashboard</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">AI-powered hiring insights dashboard</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            View hiring analytics, score trends, skill gaps, and matched skills in one professional summary.
-          </p>
+        <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-6 shadow-sm">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B8B9E]">Analytics Dashboard</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#F1F1F3] sm:text-4xl">Hiring Dashboard</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-[#8B8B9E]">AI-powered resume intelligence</p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Today</p>
+                <p className="mt-1 text-sm font-medium text-[#F1F1F3]">{todayLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-indigo-300 transition hover:border-indigo-400/50 hover:bg-indigo-500/15 hover:shadow-lg hover:shadow-indigo-500/10"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </button>
+            </div>
+          </div>
         </section>
 
         {loading ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <div className="flex items-center gap-3 text-slate-600">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
-              <p className="text-sm font-medium">Loading dashboard stats...</p>
+          <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-10 shadow-sm">
+            <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-indigo-400" />
+              <p className="text-sm font-medium text-[#F1F1F3]">Loading your hiring insights...</p>
             </div>
           </section>
         ) : error ? (
-          <section className="rounded-3xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
-            <p className="text-sm font-medium text-rose-700">{error}</p>
+          <section className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-6 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-300" />
+                <div>
+                  <p className="text-sm font-semibold text-rose-200">Unable to load dashboard data</p>
+                  <p className="mt-1 text-sm text-rose-200/80">{error}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="inline-flex items-center justify-center rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20"
+              >
+                Retry
+              </button>
+            </div>
+          </section>
+        ) : !hasInsights ? (
+          <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-8 shadow-sm">
+            <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-[#0F0F13] text-indigo-300 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
+                <FileText className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-[#F1F1F3]">No analysis data yet</h2>
+                <p className="mt-2 text-sm leading-6 text-[#8B8B9E]">Upload your first resume to get started.</p>
+              </div>
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90"
+              >
+                Go to upload page
+              </Link>
+            </div>
           </section>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {summaryCards.map((card) => (
-                <article key={card.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{card.label}</p>
-                  <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{card.value}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{card.detail}</p>
-                </article>
-              ))}
+            <section className="grid gap-4 xl:grid-cols-4">
+              {summaryCards.map((card, index) => {
+                const cardMeta = [
+                  { icon: FileText, accent: 'border-l-blue-500', iconTone: 'text-blue-300', iconBg: 'bg-blue-500/10' },
+                  { icon: Target, accent: 'border-l-emerald-500', iconTone: 'text-emerald-300', iconBg: 'bg-emerald-500/10' },
+                  { icon: Users, accent: 'border-l-violet-500', iconTone: 'text-violet-300', iconBg: 'bg-violet-500/10' },
+                  { icon: AlertCircle, accent: 'border-l-orange-500', iconTone: 'text-orange-300', iconBg: 'bg-orange-500/10' },
+                ][index];
+                const Icon = cardMeta.icon;
+
+                return (
+                  <article
+                    key={card.label}
+                    className={`rounded-3xl border border-white/10 border-l-4 bg-[#1A1A24] p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(0,0,0,0.35)] ${cardMeta.accent}`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${cardMeta.iconBg}`}>
+                        <Icon className={`h-5 w-5 ${cardMeta.iconTone}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-3xl font-semibold tracking-tight text-[#F1F1F3]">{card.value}</p>
+                        <p className="mt-2 text-sm font-medium text-[#F1F1F3]">{card.label}</p>
+                        <p className="mt-1 text-sm leading-6 text-[#8B8B9E]">{card.detail}</p>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </section>
 
             <section className="grid gap-4 xl:grid-cols-2">
-              <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <article className="rounded-3xl border border-white/10 border-t-4 border-t-blue-500 bg-[#1A1A24] p-6 shadow-sm">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trend</p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-950">Match score trend over time</h2>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8B8B9E]">Trend</p>
+                  <h2 className="mt-1 text-lg font-semibold text-[#F1F1F3]">Match score trend over time</h2>
+                  <p className="mt-2 text-sm text-[#8B8B9E]">Track how match quality moves across recent analyses.</p>
                 </div>
                 <div className="mt-5">
                   <ScoreTrendChart data={trendData} />
                 </div>
               </article>
 
-              <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <article className="rounded-3xl border border-white/10 border-t-4 border-t-violet-500 bg-[#1A1A24] p-6 shadow-sm">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Distribution</p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-950">Skill gaps distribution</h2>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8B8B9E]">Distribution</p>
+                  <h2 className="mt-1 text-lg font-semibold text-[#F1F1F3]">Skill gaps distribution</h2>
+                  <p className="mt-2 text-sm text-[#8B8B9E]">See where candidates cluster by gap severity.</p>
                 </div>
                 <div className="mt-5">
                   <SkillGapChart data={skillGapData} />
@@ -250,10 +344,11 @@ export default function DashboardPage() {
               </article>
             </section>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="rounded-3xl border border-white/10 border-t-4 border-t-indigo-500 bg-[#1A1A24] p-6 shadow-sm">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Skills</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-950">Top skills matched</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8B8B9E]">Skills</p>
+                <h2 className="mt-1 text-lg font-semibold text-[#F1F1F3]">Top Skills Matched</h2>
+                <p className="mt-2 text-sm text-[#8B8B9E]">A quick view of the strongest capability signals across analyzed resumes.</p>
               </div>
               <div className="mt-5">
                 <SkillsPieChart data={pieData} />
@@ -262,6 +357,6 @@ export default function DashboardPage() {
           </>
         )}
       </div>
-    </main>
+    </div>
   );
 }

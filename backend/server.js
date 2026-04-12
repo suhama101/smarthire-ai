@@ -8,6 +8,7 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
 const analyzeRoutes = require('./routes/analyze');
+const batchRoutes = require('./routes/batch');
 const debugRoutes = require('./routes/debug');
 
 const { isAnthropicConfigured } = require('./services/claudeService');
@@ -126,6 +127,10 @@ app.use('/api/auth', authRoutes);
 
 
 app.use('/api/analyze', analyzeRoutes);
+
+
+
+app.use('/api/batch', batchRoutes);
 
 
 

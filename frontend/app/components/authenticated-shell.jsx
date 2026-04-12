@@ -60,9 +60,9 @@ export default function AuthenticatedShell({ children }) {
   const navItems = useMemo(
     () => [
       { label: 'Home', href: '/' },
-      { label: 'Dashboard', href: '/dashboard', authOnly: true, icon: LayoutDashboard },
-      { label: 'Batch Upload', href: '/batch', authOnly: true, icon: Upload },
-      { label: 'History', href: '/history', authOnly: true, icon: History },
+      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Batch Upload', href: '/batch', icon: Upload },
+      { label: 'History', href: '/history', icon: History },
     ],
     [],
   );
@@ -70,7 +70,7 @@ export default function AuthenticatedShell({ children }) {
   const displayName = authSession?.user?.full_name || authSession?.user?.email || 'Guest';
   const initials = getInitials(displayName);
   const isAuthenticated = Boolean(authSession?.token);
-  const visibleNavItems = navItems.filter((item) => !item.authOnly || isAuthenticated);
+  const visibleNavItems = navItems;
 
   function signOut(event) {
     event?.stopPropagation?.();
