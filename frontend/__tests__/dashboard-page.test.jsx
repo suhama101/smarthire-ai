@@ -55,7 +55,7 @@ describe('DashboardPage', () => {
   test('fetches dashboard stats and renders summary cards', async () => {
     render(<DashboardPage />);
 
-    expect(screen.getByText(/Loading dashboard stats/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading your hiring insights/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(axios.get).toHaveBeenCalledWith('https://api.example.com/api/history/stats');

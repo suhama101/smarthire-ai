@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import axios from 'axios';
+import { readStoredAuth } from '../src/lib/auth-session';
 
 function scoreTheme(score) {
   if (score >= 80) {
@@ -44,19 +46,6 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
-function readStoredAuth() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem('smarthire.auth');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function getInitials(name) {
   const text = String(name || '').trim();
   if (!text) {
@@ -76,11 +65,6 @@ export default function HomePage() {
   const hasApiUrl = apiUrl.length > 0;
   const [health, setHealth] = useState('Checking API...');
   const [workspaceMode, setWorkspaceMode] = useState('candidate');
-  const [authMode, setAuthMode] = useState('login');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authFullName, setAuthFullName] = useState('SmartHire User');
-  const [authRole, setAuthRole] = useState('candidate');
   const [authToken, setAuthToken] = useState('');
   const [authUser, setAuthUser] = useState(null);
   const [authProfile, setAuthProfile] = useState(null);
@@ -225,28 +209,6 @@ export default function HomePage() {
     }
   }
 
-  function persistAuthSession(session) {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem('smarthire.auth', JSON.stringify(session));
-    window.dispatchEvent(new Event('smarthire-auth-changed'));
-  }
-
-  function clearAuthSession() {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('smarthire.auth');
-      window.dispatchEvent(new Event('smarthire-auth-changed'));
-    }
-
-    setAuthToken('');
-    setAuthUser(null);
-    setAuthProfile(null);
-    setAuthError('');
-    setAuthStatus('Signed out.');
-  }
-
   function resetWorkspace() {
     setFile(null);
     setAnalysisError('');
@@ -262,64 +224,6 @@ export default function HomePage() {
     setLearningPlanResult(null);
     setAuthStatus('Workspace reset.');
     setRecruiterDecision('review');
-  }
-
-  async function handleAuthSubmit(event) {
-    event.preventDefault();
-
-    if (!hasApiUrl) {
-      setAuthError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
-      return;
-    }
-
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError('Email and password are required.');
-      return;
-    }
-
-    if (authMode === 'signup' && !authFullName.trim()) {
-      setAuthError('Full name is required for signup.');
-      return;
-    }
-
-    setAuthBusy(true);
-    setAuthError('');
-    setAuthStatus('');
-
-    try {
-      const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
-      const payload =
-        authMode === 'signup'
-          ? {
-              email: authEmail.trim(),
-              password: authPassword,
-              full_name: authFullName.trim(),
-              role: authRole,
-            }
-          : {
-              email: authEmail.trim(),
-              password: authPassword,
-            };
-
-      const response = await axios.post(`${apiUrl}${endpoint}`, payload);
-      const token = response.data?.token || '';
-      const user = response.data?.user || null;
-
-      if (!token) {
-        throw new Error('Authentication response did not include a token.');
-      }
-
-      setAuthToken(token);
-      setAuthUser(user);
-      setAuthProfile(null);
-      setAuthStatus(authMode === 'signup' ? 'Account created successfully.' : 'Signed in successfully.');
-      persistAuthSession({ token, user });
-    } catch (error) {
-      const message = error?.response?.data?.error || error?.message || 'Authentication failed.';
-      setAuthError(message);
-    } finally {
-      setAuthBusy(false);
-    }
   }
 
   async function handleUpload(event) {
@@ -458,8 +362,8 @@ export default function HomePage() {
   const recruiterDecisionLabel =
     recruiterDecision === 'shortlist' ? 'Shortlisted' : recruiterDecision === 'reject' ? 'Rejected' : 'In review';
   const displayName = authProfile?.full_name || authUser?.full_name || 'Guest';
-  const displayEmail = authProfile?.email || authUser?.email || authEmail;
-  const displayRole = authProfile?.role || authUser?.role || authRole;
+  const displayEmail = authProfile?.email || authUser?.email || '';
+  const displayRole = authProfile?.role || authUser?.role || 'candidate';
   const profileInitials = getInitials(displayName);
   const workspaceTitle = workspaceMode === 'recruiter' ? 'Recruiter Console' : 'Candidate Workspace';
   const workspaceTagline = workspaceMode === 'recruiter'
@@ -652,156 +556,30 @@ export default function HomePage() {
           </aside>
         </section>
 
-        <section id="resume-analysis" className="grid gap-4 lg:grid-cols-5">
-          <form onSubmit={handleAuthSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Account Access</p>
-                <h2 className="mt-1 text-base font-semibold text-slate-900">
-                  {workspaceMode === 'recruiter' ? 'Sign in or create a recruiter account' : 'Sign in or create a candidate account'}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">Use the backend auth endpoints to store a session and load your profile.</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${authMode === 'login' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('signup')}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${authMode === 'signup' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  Signup
-                </button>
-              </div>
+        <section className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(79,70,229,0.16),rgba(15,15,19,0.92))] p-6 shadow-[0_30px_100px_-50px_rgba(79,70,229,0.5)] backdrop-blur">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Account Access</p>
+              <h2 className="text-2xl font-semibold tracking-tight text-[#F1F1F3]">Login and signup now live on dedicated pages</h2>
+              <p className="max-w-2xl text-sm leading-6 text-[#8B8B9E]">
+                Use the new routes for authentication, then return here with your session restored from the shared browser state.
+              </p>
             </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              />
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Password"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              />
-            </div>
-
-            {authMode === 'signup' ? (
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <input
-                  type="text"
-                  value={authFullName}
-                  onChange={(e) => setAuthFullName(e.target.value)}
-                  placeholder="Full name"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                />
-                <select
-                  value={authRole}
-                  onChange={(e) => setAuthRole(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                >
-                  <option value="candidate">Candidate</option>
-                  <option value="recruiter">Recruiter</option>
-                </select>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                disabled={authBusy}
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/login"
+                className="rounded-[10px] bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-medium text-white transition duration-200 ease-in-out hover:from-indigo-500 hover:to-violet-500"
               >
-                {authBusy ? 'Working...' : authMode === 'signup' ? 'Create Account' : 'Sign In'}
-              </button>
-              {authToken ? (
-                <button
-                  type="button"
-                  onClick={clearAuthSession}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Sign Out
-                </button>
-              ) : null}
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-[10px] border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-[#F1F1F3] transition duration-200 ease-in-out hover:border-indigo-500/40 hover:bg-white/10"
+              >
+                Signup
+              </Link>
             </div>
-
-            {authError ? <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{authError}</p> : null}
-            {authStatus ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{authStatus}</p> : null}
-          </form>
-
-          <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Session</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900">
-              {workspaceMode === 'recruiter' ? 'Recruiter profile' : 'Current profile'}
-            </h2>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
-                  {profileInitials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold text-slate-900">{displayName}</p>
-                  <p className="truncate text-sm text-slate-500">{displayEmail || 'Not signed in'}</p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Role</p>
-                  <p className="mt-1 text-sm font-medium text-slate-800 capitalize">{displayRole}</p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Access</p>
-                  <p className="mt-1 text-sm font-medium text-slate-800">{authToken ? 'Authenticated' : 'Anonymous'}</p>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Profile stats</p>
-                <p className="mt-1 text-sm text-slate-700">
-                  {authProfile?.stats ? `${authProfile.stats.analyses} analyses · ${authProfile.stats.matches} matches` : 'No profile loaded yet'}
-                </p>
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Switch to Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('signup')}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Switch to Signup
-                </button>
-              </div>
-
-              {authToken ? (
-                <button
-                  type="button"
-                  onClick={clearAuthSession}
-                  className="mt-3 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
-                >
-                  Log out
-                </button>
-              ) : null}
-            </div>
-          </aside>
+          </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

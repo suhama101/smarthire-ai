@@ -5,22 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, FileText, RefreshCw, Target, Users } from 'lucide-react';
 import axios from 'axios';
+import { readStoredAuth } from '../../lib/auth-session';
 import ScoreTrendChart from './components/ScoreTrendChart';
 import SkillGapChart from './components/SkillGapChart';
 import SkillsPieChart from './components/SkillsPieChart';
-
-function readStoredAuth() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem('smarthire.auth');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 
 function normalizeMetricValue(value) {
   if (value === null || value === undefined || value === '') {
@@ -90,7 +78,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const stored = readStoredAuth();
     if (!stored?.token) {
-      router.replace('/');
+      router.replace('/login');
       return;
     }
 

@@ -4,19 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, LayoutDashboard, History, Upload, LogOut, Sparkles } from 'lucide-react';
-
-function readStoredAuth() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem('smarthire.auth');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
+import { clearAuthSession, readStoredAuth } from '../../src/lib/auth-session';
 
 function getInitials(name) {
   const text = String(name || '').trim();
@@ -35,6 +23,11 @@ export default function AuthenticatedShell({ children }) {
   const pathname = usePathname();
   const [authSession, setAuthSession] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const isAuthRoute = pathname === '/login' || pathname === '/signup';
+
+  if (isAuthRoute) {
+    return children;
+  }
 
   useEffect(() => {
     function syncAuthState() {
@@ -74,12 +67,7 @@ export default function AuthenticatedShell({ children }) {
 
   function signOut(event) {
     event?.stopPropagation?.();
-
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('smarthire.auth');
-      window.dispatchEvent(new Event('smarthire-auth-changed'));
-    }
-
+    clearAuthSession();
     setAuthSession(null);
     setMenuOpen(false);
   }
@@ -121,6 +109,23 @@ export default function AuthenticatedShell({ children }) {
             })}
           </nav>
 
+          {!isAuthenticated ? (
+            <div className="hidden items-center gap-2 md:flex">
+              <Link
+                href="/login"
+                className="rounded-[10px] border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-[#F1F1F3] transition duration-200 ease-in-out hover:border-indigo-500/40 hover:bg-white/10"
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-[10px] bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white transition duration-200 ease-in-out hover:from-indigo-500 hover:to-violet-500"
+              >
+                Signup
+              </Link>
+            </div>
+          ) : null}
+
           <div className="relative" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
@@ -153,13 +158,22 @@ export default function AuthenticatedShell({ children }) {
                     Sign out
                   </button>
                 ) : (
-                  <Link
-                    href="/#auth"
-                    className="mt-2 flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-[#F1F1F3] transition duration-200 ease-in-out hover:bg-white/5"
-                  >
-                    <Sparkles className="h-4 w-4 text-indigo-400" />
-                    Go to sign in
-                  </Link>
+                  <div className="mt-2 space-y-1">
+                    <Link
+                      href="/login"
+                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-[#F1F1F3] transition duration-200 ease-in-out hover:bg-white/5"
+                    >
+                      <Sparkles className="h-4 w-4 text-indigo-400" />
+                      Go to login
+                    </Link>
+                    <Link
+                      href="/signup"
+                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-[#F1F1F3] transition duration-200 ease-in-out hover:bg-white/5"
+                    >
+                      <Sparkles className="h-4 w-4 text-indigo-400" />
+                      Go to signup
+                    </Link>
+                  </div>
                 )}
               </div>
             ) : null}

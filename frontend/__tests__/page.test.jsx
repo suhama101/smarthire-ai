@@ -29,6 +29,8 @@ describe('HomePage', () => {
 
     expect(screen.getByText('AI-Powered Hiring Intelligence')).toBeInTheDocument();
     expect(screen.queryByText('Authentication')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Login' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Signup' })).toHaveAttribute('href', '/signup');
 
     await waitFor(() => {
       expect(screen.getByText(/API healthy at/i)).toBeInTheDocument();
