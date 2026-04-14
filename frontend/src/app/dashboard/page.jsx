@@ -93,24 +93,13 @@ export default function DashboardPage() {
     let isMounted = true;
 
     async function loadDashboardStats() {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const cleanedApiUrl = apiUrl.trim().replace(/\/$/, '');
-
       if (isMounted) {
         setLoading(true);
         setError('');
       }
 
-      if (!cleanedApiUrl) {
-        if (isMounted) {
-          setError('NEXT_PUBLIC_API_URL is not configured.');
-          setLoading(false);
-        }
-        return;
-      }
-
       try {
-        const response = await axios.get(`${cleanedApiUrl}/api/history/stats`);
+        const response = await axios.get('/api/history/stats');
 
         if (!isMounted) {
           return;

@@ -25,10 +25,6 @@ export default function AuthenticatedShell({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isAuthRoute = pathname === '/login' || pathname === '/signup';
 
-  if (isAuthRoute) {
-    return children;
-  }
-
   useEffect(() => {
     function syncAuthState() {
       setAuthSession(readStoredAuth());
@@ -64,6 +60,10 @@ export default function AuthenticatedShell({ children }) {
   const initials = getInitials(displayName);
   const isAuthenticated = Boolean(authSession?.token);
   const visibleNavItems = navItems;
+
+  if (isAuthRoute) {
+    return children;
+  }
 
   function signOut(event) {
     event?.stopPropagation?.();

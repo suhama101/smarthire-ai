@@ -5,23 +5,11 @@ import HomePage from '../app/page';
 jest.mock('axios');
 
 describe('HomePage', () => {
-  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';
     axios.get.mockResolvedValue({
       data: { timestamp: '2026-04-06T12:00:00.000Z' },
     });
-  });
-
-  afterAll(() => {
-    if (typeof originalApiUrl === 'undefined') {
-      delete process.env.NEXT_PUBLIC_API_URL;
-      return;
-    }
-
-    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
   });
 
   test('renders the dashboard shell and health status', async () => {
@@ -33,6 +21,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('link', { name: 'Signup' })).toHaveAttribute('href', '/signup');
 
     await waitFor(() => {
+      expect(axios.get).toHaveBeenCalledWith('/api/health');
       expect(screen.getByText(/API healthy at/i)).toBeInTheDocument();
     });
   });

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
-import { readStoredAuth } from '../src/lib/auth-session';
+import { clearAuthSession, readStoredAuth } from '../src/lib/auth-session';
 
 function scoreTheme(score) {
   if (score >= 80) {
@@ -60,9 +60,7 @@ function getInitials(name) {
 }
 
 export default function HomePage() {
-  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-  const apiUrl = rawApiUrl.trim().replace(/\/$/, '');
-  const hasApiUrl = apiUrl.length > 0;
+  const apiUrl = '/api';
   const [health, setHealth] = useState('Checking API...');
   const [workspaceMode, setWorkspaceMode] = useState('candidate');
   const [authToken, setAuthToken] = useState('');
@@ -116,15 +114,8 @@ export default function HomePage() {
   useEffect(() => {
     let mounted = true;
 
-    if (!hasApiUrl) {
-      setHealth('API URL is missing. Set NEXT_PUBLIC_API_URL in your environment.');
-      return () => {
-        mounted = false;
-      };
-    }
-
     axios
-      .get(`${apiUrl}/api/health`)
+      .get(`${apiUrl}/health`)
       .then((data) => {
         if (!mounted) {
           return;
@@ -135,23 +126,23 @@ export default function HomePage() {
         if (!mounted) {
           return;
         }
-        setHealth('API is not reachable. Verify backend deployment URL and CORS settings.');
+        setHealth('API is not reachable. Verify the backend proxy target on the server.');
       });
 
     return () => {
       mounted = false;
     };
-  }, [apiUrl, hasApiUrl]);
+  }, [apiUrl]);
 
   useEffect(() => {
-    if (!hasApiUrl || !authToken) {
+    if (!authToken) {
       return;
     }
 
     let mounted = true;
 
     axios
-      .get(`${apiUrl}/api/auth/profile`, {
+      .get(`${apiUrl}/auth/profile`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -178,10 +169,10 @@ export default function HomePage() {
     return () => {
       mounted = false;
     };
-  }, [apiUrl, authToken, hasApiUrl]);
+  }, [apiUrl, authToken]);
 
   async function refreshAuthProfile() {
-    if (!hasApiUrl || !authToken) {
+    if (!authToken) {
       setAuthStatus('Sign in first to refresh the profile.');
       return;
     }
@@ -190,7 +181,7 @@ export default function HomePage() {
     setAuthStatus('Refreshing profile...');
 
     try {
-      const response = await axios.get(`${apiUrl}/api/auth/profile`, {
+      const response = await axios.get(`${apiUrl}/auth/profile`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -229,11 +220,6 @@ export default function HomePage() {
   async function handleUpload(event) {
     event.preventDefault();
 
-    if (!hasApiUrl) {
-      setAnalysisError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
-      return;
-    }
-
     if (!file) {
       setAnalysisError('Please choose a resume file first.');
       return;
@@ -252,7 +238,7 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append('resume', file);
 
-      const response = await axios.post(`${apiUrl}/api/analyze/resume`, formData, {
+      const response = await axios.post(`${apiUrl}/analyze/resume`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -271,11 +257,6 @@ export default function HomePage() {
 
   async function handleMatchJob(event) {
     event.preventDefault();
-
-    if (!hasApiUrl) {
-      setMatchError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
-      return;
-    }
 
     const analysisId = analysisResult?.analysisId;
     if (!analysisId) {
@@ -296,7 +277,7 @@ export default function HomePage() {
     setIsMatching(true);
 
     try {
-      const response = await axios.post(`${apiUrl}/api/analyze/match`, {
+      const response = await axios.post(`${apiUrl}/analyze/match`, {
         analysisId,
         jobTitle,
         companyName,
@@ -315,11 +296,6 @@ export default function HomePage() {
   async function handleGenerateLearningPlan(event) {
     event.preventDefault();
 
-    if (!hasApiUrl) {
-      setLearningPlanError('Missing NEXT_PUBLIC_API_URL. Configure frontend environment variables.');
-      return;
-    }
-
     if (!matchResult?.missingSkills || matchResult.missingSkills.length === 0) {
       setLearningPlanError('No missing skills to create a learning plan.');
       return;
@@ -335,7 +311,7 @@ export default function HomePage() {
     setIsGeneratingPlan(true);
 
     try {
-      const response = await axios.post(`${apiUrl}/api/analyze/learning-plan`, {
+      const response = await axios.post(`${apiUrl}/analyze/learning-plan`, {
         missingSkills: matchResult.missingSkills,
         targetRole: targetRole.trim(),
         yearsExperience: analysisResult?.resumeData?.yearsExperience || 1,

@@ -5,11 +5,6 @@ import axios from 'axios';
 
 const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt';
 
-function readApiUrl() {
-  const value = process.env.NEXT_PUBLIC_API_URL || '';
-  return value.trim().replace(/\/$/, '');
-}
-
 function formatSkills(skills) {
   if (!Array.isArray(skills) || skills.length === 0) {
     return 'No matched skills returned';
@@ -36,7 +31,7 @@ function normalizeCandidates(payload) {
 }
 
 export default function BatchResumeUploadPage() {
-  const apiUrl = useMemo(readApiUrl, []);
+  const apiUrl = useMemo(() => '/api', []);
   const fileInputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [jobDescription, setJobDescription] = useState('');
@@ -83,11 +78,6 @@ export default function BatchResumeUploadPage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!apiUrl) {
-      setError('Missing NEXT_PUBLIC_API_URL. Set your backend base URL first.');
-      return;
-    }
-
     if (!files.length) {
       setError('Upload at least one resume file before submitting.');
       return;
@@ -110,7 +100,7 @@ export default function BatchResumeUploadPage() {
         formData.append('resumes', file);
       });
 
-      const response = await axios.post(`${apiUrl}/api/batch/analyze`, formData, {
+      const response = await axios.post(`${apiUrl}/batch/analyze`, formData, {
         timeout: 120000,
       });
 

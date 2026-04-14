@@ -9,12 +9,10 @@ jest.mock('next/navigation', () => ({
 }));
 
 describe('DashboardPage', () => {
-  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
   const replaceMock = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';
     window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123' }));
     useRouter.mockReturnValue({ replace: replaceMock });
     axios.get.mockResolvedValue({
@@ -43,22 +41,13 @@ describe('DashboardPage', () => {
     window.localStorage.removeItem('smarthire.auth');
   });
 
-  afterAll(() => {
-    if (typeof originalApiUrl === 'undefined') {
-      delete process.env.NEXT_PUBLIC_API_URL;
-      return;
-    }
-
-    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
-  });
-
   test('fetches dashboard stats and renders summary cards', async () => {
     render(<DashboardPage />);
 
     expect(screen.getByText(/Loading your hiring insights/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith('https://api.example.com/api/history/stats');
+      expect(axios.get).toHaveBeenCalledWith('/api/history/stats');
     });
 
     expect(screen.getByText('Total resumes analyzed')).toBeInTheDocument();

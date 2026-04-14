@@ -5,11 +5,8 @@ import BatchResumeUploadPage from '../app/batch/page';
 jest.mock('axios');
 
 describe('BatchResumeUploadPage', () => {
-  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';
     axios.post.mockResolvedValue({
       data: {
         message: 'Batch analysis complete',
@@ -29,15 +26,6 @@ describe('BatchResumeUploadPage', () => {
         ],
       },
     });
-  });
-
-  afterAll(() => {
-    if (typeof originalApiUrl === 'undefined') {
-      delete process.env.NEXT_PUBLIC_API_URL;
-      return;
-    }
-
-    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
   });
 
   test('uploads multiple resumes and renders ranked candidates', async () => {
@@ -63,6 +51,7 @@ describe('BatchResumeUploadPage', () => {
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
+      expect(axios.post).toHaveBeenCalledWith('/api/batch/analyze', expect.any(FormData), expect.any(Object));
       expect(screen.getByText('Ava Chen')).toBeInTheDocument();
       expect(screen.getByText('Noah Patel')).toBeInTheDocument();
     });

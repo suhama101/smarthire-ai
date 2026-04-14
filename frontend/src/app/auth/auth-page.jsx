@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -9,7 +9,6 @@ import { persistAuthSession } from '../../lib/auth-session';
 export default function AuthPage({ mode }) {
   const router = useRouter();
   const isSignup = mode === 'signup';
-  const apiUrl = useMemo(() => (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('SmartHire User');
@@ -19,11 +18,6 @@ export default function AuthPage({ mode }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
-
-    if (!apiUrl) {
-      setError('Missing NEXT_PUBLIC_API_URL. Configure the frontend environment first.');
-      return;
-    }
 
     if (!email.trim() || !password.trim()) {
       setError('Email and password are required.');
@@ -52,7 +46,7 @@ export default function AuthPage({ mode }) {
             password,
           };
 
-      const response = await axios.post(`${apiUrl}${endpoint}`, payload);
+      const response = await axios.post(endpoint, payload);
       const token = response.data?.token || '';
       const user = response.data?.user || null;
 
