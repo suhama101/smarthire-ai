@@ -13,6 +13,45 @@ function formatSkills(skills) {
   return skills.slice(0, 5).join(', ');
 }
 
+function isMeaningfulJobDescription(value) {
+  const text = String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  if (text.length < 20) {
+    return false;
+  }
+
+  const words = text.replace(/[^a-z0-9+#.\-/\s]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length < 4) {
+    return false;
+  }
+
+  const signalTerms = [
+    'experience',
+    'required',
+    'skills',
+    'responsibilities',
+    'qualifications',
+    'build',
+    'develop',
+    'design',
+    'maintain',
+    'testing',
+    'deploy',
+    'cloud',
+    'database',
+    'api',
+    'frontend',
+    'backend',
+    'git',
+  ];
+
+  if (signalTerms.some((term) => text.includes(term))) {
+    return true;
+  }
+
+  return words.filter((word) => signalTerms.includes(word)).length >= 3;
+}
+
 function normalizeCandidates(payload) {
   const source = Array.isArray(payload)
     ? payload
@@ -38,9 +77,13 @@ export default function BatchResumeUploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [jobDescriptionError, setJobDescriptionError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [rankedCandidates, setRankedCandidates] = useState([]);
   const [responseSummary, setResponseSummary] = useState('');
+
+  const trimmedJobDescription = jobDescription.trim();
+  const hasValidJobDescription = isMeaningfulJobDescription(trimmedJobDescription);
 
   function addFiles(nextFiles) {
     const validFiles = Array.from(nextFiles || []).filter((file) => /\.(pdf|docx|txt)$/i.test(file.name));
@@ -83,19 +126,24 @@ export default function BatchResumeUploadPage() {
       return;
     }
 
-    if (!jobDescription.trim()) {
-      setError('Add a job description to rank the resumes.');
+    if (!hasValidJobDescription) {
+      setError('Please enter a valid job description to get accurate results');
+      setJobDescriptionError('Please enter a valid job description to get accurate results');
+      setRankedCandidates([]);
+      setResponseSummary('');
+      setSuccessMessage('');
       return;
     }
 
     setIsSubmitting(true);
     setError('');
+    setJobDescriptionError('');
     setSuccessMessage('');
     setResponseSummary('');
 
     try {
       const formData = new FormData();
-      formData.append('job_description', jobDescription.trim());
+      formData.append('job_description', trimmedJobDescription);
       files.forEach((file) => {
         formData.append('resumes', file);
       });
@@ -111,6 +159,11 @@ export default function BatchResumeUploadPage() {
     } catch (submitError) {
       const message = submitError?.response?.data?.error || submitError?.message || 'Batch analysis failed.';
       setError(message);
+      setRankedCandidates([]);
+      setResponseSummary('');
+      if (/job description/i.test(message)) {
+        setJobDescriptionError(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -237,11 +290,32 @@ export default function BatchResumeUploadPage() {
               <textarea
                 id="job-description"
                 value={jobDescription}
-                onChange={(event) => setJobDescription(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setJobDescription(nextValue);
+
+                  if (nextValue.trim()) {
+                    setJobDescriptionError('');
+                    if (error === 'Please enter a valid job description to get accurate results') {
+                      setError('');
+                    }
+                  }
+                }}
                 rows={10}
                 placeholder="Paste the role requirements, responsibilities, and must-have qualifications here."
-                className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#8B8B9E] focus:border-white/20 focus:ring-2 focus:ring-white/10"
+                aria-invalid={Boolean(jobDescriptionError)}
+                aria-describedby={jobDescriptionError ? 'job-description-error' : undefined}
+                className={`w-full rounded-2xl border bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#8B8B9E] focus:ring-2 focus:ring-white/10 ${
+                  jobDescriptionError
+                    ? 'border-rose-500/70 focus:border-rose-400 focus:ring-rose-500/20'
+                    : 'border-white/10 focus:border-white/20'
+                }`}
               />
+              {jobDescriptionError ? (
+                <p id="job-description-error" className="mt-2 text-sm text-rose-300">
+                  {jobDescriptionError}
+                </p>
+              ) : null}
             </div>
 
             {error ? <p className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
@@ -295,7 +369,9 @@ export default function BatchResumeUploadPage() {
                     ) : (
                       <tr>
                         <td colSpan="4" className="px-4 py-12 text-center text-sm text-[#8B8B9E]">
-                          Submit the batch analysis to display the ranked shortlist here.
+                          {hasValidJobDescription
+                            ? 'Submit the batch analysis to display the ranked shortlist here.'
+                            : 'Enter a job description to enable candidate ranking.'}
                         </td>
                       </tr>
                     )}

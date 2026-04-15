@@ -1,3 +1,4 @@
+const { randomUUID } = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { z } = require('zod');
@@ -30,6 +31,18 @@ function usesRealSupabase(client) {
   return Boolean(client && !client.__isMemory);
 }
 
+function createUserId() {
+  return `user_${randomUUID()}`;
+}
+
+function isNoRowFoundError(error) {
+  return error?.code === 'PGRST116' || /no rows found/i.test(String(error?.message || ''));
+}
+
+function isUniqueConstraintError(error) {
+  return error?.code === '23505' || /duplicate key/i.test(String(error?.message || ''));
+}
+
 // ---------- Helper ----------
 const generateToken = (user) => {
   return jwt.sign(
@@ -49,16 +62,24 @@ const signup = async (req, res) => {
 
     const { email, password, full_name, role } = parsed.data;
     const password_hash = await bcrypt.hash(password, 12);
+    const id = createUserId();
 
     const supabase = getDbClient();
 
     if (usesRealSupabase(supabase)) {
       // Check existing user
-      const { data: existing } = await supabase
+      const existingQuery = supabase
         .from('users')
         .select('id')
-        .eq('email', email)
-        .single();
+        .eq('email', email);
+
+      const { data: existing, error: existingError } = existingQuery.maybeSingle
+        ? await existingQuery.maybeSingle()
+        : await existingQuery.single();
+
+      if (existingError && !isNoRowFoundError(existingError)) {
+        throw existingError;
+      }
 
       if (existing) {
         return res.status(409).json({ error: 'Email already registered' });
@@ -67,11 +88,16 @@ const signup = async (req, res) => {
       // Insert new user
       const { data: newUser, error } = await supabase
         .from('users')
-        .insert({ email, password_hash, full_name, role })
+        .insert({ id, email, password_hash, full_name, role })
         .select('id, email, full_name, role, created_at')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (isUniqueConstraintError(error)) {
+          return res.status(409).json({ error: 'Email already registered' });
+        }
+        throw error;
+      }
 
       const token = generateToken(newUser);
       return res.status(201).json({ token, user: newUser });
@@ -80,7 +106,6 @@ const signup = async (req, res) => {
       if (memoryUsers.has(email)) {
         return res.status(409).json({ error: 'Email already registered' });
       }
-      const id = `mem_${Date.now()}`;
       const user = { id, email, full_name, role, created_at: new Date().toISOString() };
       memoryUsers.set(email, { ...user, password_hash });
       const token = generateToken(user);

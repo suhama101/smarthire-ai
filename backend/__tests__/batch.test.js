@@ -56,4 +56,18 @@ describe('batch resume analysis', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ error: 'Please upload at least one resume file.' });
   });
+
+  test('rejects requests without a job description', async () => {
+    const response = await request(app)
+      .post('/api/batch/analyze')
+      .attach('resumes', Buffer.from('Alice resume content '.repeat(10)), {
+        filename: 'alice.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: 'Job description is required to analyze and rank candidates',
+    });
+  });
 });

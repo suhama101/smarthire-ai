@@ -1,7 +1,7 @@
 const express = require('express');
 const { upload } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
-const { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured, isMeaningfulJobDescription } = require('../services/claudeService');
 const { saveAnalysis, getAnalysisById, saveJobMatch, deleteAnalysisById, deleteJobMatchById } = require('../services/db');
 
 const router = express.Router();
@@ -96,9 +96,14 @@ router.post('/match', async (req, res, next) => {
   try {
     const userId = req.user?.id || DEFAULT_USER_ID;
     const { analysisId, jobTitle, companyName, jobDescription } = req.body;
+    const trimmedJobDescription = typeof jobDescription === 'string' ? jobDescription.trim() : '';
 
-    if (!analysisId || !jobDescription) {
+    if (!analysisId || !trimmedJobDescription) {
       return res.status(400).json({ error: 'analysisId and jobDescription are required.' });
+    }
+
+    if (!isMeaningfulJobDescription(trimmedJobDescription)) {
+      return res.status(400).json({ error: 'Please enter a valid job description to get accurate results' });
     }
 
     console.info('[analyze/match] request received', {
@@ -106,14 +111,10 @@ router.post('/match', async (req, res, next) => {
       analysisId,
       jobTitle,
       companyName,
-      jobDescriptionLength: String(jobDescription || '').length,
-      jobDescriptionPreview: previewText(jobDescription, 3000),
+      jobDescriptionLength: trimmedJobDescription.length,
+      jobDescriptionPreview: previewText(trimmedJobDescription, 3000),
       aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
     });
-
-    if (jobDescription.length < 50) {
-      return res.status(400).json({ error: 'Job description is too short. Please paste the full job description.' });
-    }
 
     // Get the resume analysis
     const analysis = await getAnalysisById(analysisId, userId);
@@ -121,7 +122,7 @@ router.post('/match', async (req, res, next) => {
       return res.status(404).json({ error: 'Resume analysis not found.' });
     }
 
-    const matchResult = await matchJobDescription(analysis.resume_data, jobDescription);
+    const matchResult = await matchJobDescription(analysis.resume_data, trimmedJobDescription);
 
     // Save the match
     const jobMatch = await saveJobMatch(
@@ -129,7 +130,7 @@ router.post('/match', async (req, res, next) => {
       userId,
       jobTitle || 'Unknown Role',
       companyName || 'Unknown Company',
-      jobDescription,
+      trimmedJobDescription,
       matchResult
     );
 

@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const { uploadBatch } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
-const { extractResumeData, matchJobDescription, isAnthropicConfigured } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, isAnthropicConfigured, isMeaningfulJobDescription } = require('../services/claudeService');
 
 const router = express.Router();
 const DEFAULT_USER_ID = 'public-user';
@@ -35,14 +35,19 @@ function getCandidateName(resumeData, file) {
 router.post('/analyze', uploadBatch, async (req, res, next) => {
   const userId = req.user?.id || DEFAULT_USER_ID;
   const files = Array.isArray(req.files) ? req.files : [];
-  const jobDescription = String(req.body?.job_description || '').trim();
+  const rawJobDescription = req.body?.job_description;
+  const jobDescription = typeof rawJobDescription === 'string' ? rawJobDescription.trim() : '';
 
   if (!files.length) {
     return res.status(400).json({ error: 'Please upload at least one resume file.' });
   }
 
   if (!jobDescription) {
-    return res.status(400).json({ error: 'job_description is required.' });
+    return res.status(400).json({ error: 'Job description is required to analyze and rank candidates' });
+  }
+
+  if (!isMeaningfulJobDescription(jobDescription)) {
+    return res.status(400).json({ error: 'Please enter a valid job description to get accurate results' });
   }
 
   console.info('[batch/analyze] request received', {

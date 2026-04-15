@@ -39,6 +39,49 @@ const FALLBACK_TECH_KEYWORDS = [
   { token: 'tailwind', label: 'Tailwind' },
 ];
 
+const JOB_DESCRIPTION_MEANINGFUL_TERMS = new Set([
+  'experience',
+  'required',
+  'requirements',
+  'responsibilities',
+  'responsibility',
+  'qualifications',
+  'qualification',
+  'skills',
+  'skill',
+  'knowledge',
+  'proficiency',
+  'proficient',
+  'build',
+  'develop',
+  'design',
+  'maintain',
+  'implement',
+  'collaborate',
+  'testing',
+  'test',
+  'deployment',
+  'deploy',
+  'production',
+  'cloud',
+  'database',
+  'api',
+  'frontend',
+  'backend',
+  'fullstack',
+  'full-stack',
+  'engineering',
+  'engineer',
+  'platform',
+  'security',
+  'scalable',
+  'agile',
+  'git',
+  'team',
+  'ownership',
+  'communication',
+]);
+
 class ClaudeIntegrationError extends Error {
   constructor(message, status = 502) {
     super(message);
@@ -93,6 +136,45 @@ function hasKeyword(text, token) {
   return pattern.test(text);
 }
 
+function normalizeTextForMatching(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function extractSkillSignalsFromText(text) {
+  const normalizedText = normalizeTextForMatching(text);
+
+  return uniqueStrings(
+    FALLBACK_TECH_KEYWORDS
+      .filter((skill) => hasKeyword(normalizedText, skill.token))
+      .map((skill) => skill.label)
+  );
+}
+
+function isMeaningfulJobDescription(jobDescription) {
+  const normalizedText = normalizeTextForMatching(jobDescription);
+
+  if (normalizedText.length < 20) {
+    return false;
+  }
+
+  const words = normalizedText
+    .replace(/[^a-z0-9+#.\-/\s]/g, ' ')
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  if (words.length < 4) {
+    return false;
+  }
+
+  if (extractSkillSignalsFromText(normalizedText).length > 0) {
+    return true;
+  }
+
+  const meaningfulHits = words.filter((word) => JOB_DESCRIPTION_MEANINGFUL_TERMS.has(word)).length;
+  return meaningfulHits >= 3;
+}
+
 function buildFallbackResumeData(resumeText) {
   const text = String(resumeText || '').replace(/\s+/g, ' ').trim();
   const technicalSkills = FALLBACK_TECH_KEYWORDS
@@ -126,11 +208,7 @@ function normalizeSkill(value) {
 function buildFallbackMatchResult(resumeData, jobDescription) {
   const jdText = String(jobDescription || '');
 
-  const jdSkills = uniqueStrings(
-    FALLBACK_TECH_KEYWORDS
-      .filter((skill) => hasKeyword(jdText, skill.token))
-      .map((skill) => skill.label)
-  );
+  const jdSkills = extractSkillSignalsFromText(jdText);
 
   const candidateSkills = uniqueStrings([
     ...(resumeData?.technicalSkills || []),
@@ -146,52 +224,40 @@ function buildFallbackMatchResult(resumeData, jobDescription) {
 
   const skillsCoverage = jdSkills.length
     ? Math.round((matchedSkills.length / jdSkills.length) * 100)
-    : 60;
+    : 0;
 
   const years = Number(resumeData?.yearsExperience) || 0;
-  const experienceScore = Math.max(40, Math.min(100, 45 + years * 12));
-  const keywordsScore = skillsCoverage;
-  const educationScore = 70;
-  const overallScore = Math.round(
-    (skillsCoverage * 0.45) +
-    (experienceScore * 0.25) +
-    (keywordsScore * 0.2) +
-    (educationScore * 0.1)
-  );
+  const overallScore = skillsCoverage;
 
   const strengths = [];
   if (matchedSkills.length) {
     strengths.push(`Matched ${matchedSkills.length} key skill(s): ${matchedSkills.slice(0, 5).join(', ')}`);
   }
-  if (years > 0) {
-    strengths.push(`${years} year(s) of reported experience.`);
-  }
-  if (!strengths.length) {
-    strengths.push('Resume provides baseline transferable skills.');
+  if (!matchedSkills.length && candidateSkills.length) {
+    strengths.push('Resume contains candidate skills, but none matched the current job description.');
   }
 
   const gaps = [];
   if (missingSkills.length) {
     gaps.push(`Missing skills: ${missingSkills.slice(0, 6).join(', ')}`);
   }
-  if (years < 1) {
-    gaps.push('Limited stated experience for role requirements.');
-  }
-  if (!gaps.length) {
-    gaps.push('No major gaps detected from provided description.');
+  if (!matchedSkills.length && !missingSkills.length) {
+    gaps.push('Could not extract skills from the job description.');
   }
 
   const recommendation = missingSkills.length
     ? `Candidate can improve fit by adding: ${missingSkills.slice(0, 4).join(', ')}.`
-    : 'Strong skill alignment for the provided job description.';
+    : (jdSkills.length
+      ? 'Strong skill alignment for the provided job description.'
+      : 'Could not extract skills from the job description. Please provide a more detailed job description.');
 
   return {
     overallScore,
     breakdown: {
       technicalSkills: skillsCoverage,
-      experience: experienceScore,
-      keywords: keywordsScore,
-      education: educationScore,
+      experience: years > 0 ? Math.min(100, 50 + years * 10) : 0,
+      keywords: skillsCoverage,
+      education: Array.isArray(resumeData?.education) && resumeData.education.length ? 70 : 0,
     },
     matchedSkills,
     missingSkills,
@@ -446,18 +512,18 @@ function normalizeResumeData(raw) {
 
 function normalizeMatchResult(raw, fallbackResult) {
   const fallback = fallbackResult || {
-    overallScore: 60,
+    overallScore: 0,
     breakdown: {
-      technicalSkills: 60,
-      experience: 60,
-      keywords: 60,
-      education: 60,
+      technicalSkills: 0,
+      experience: 0,
+      keywords: 0,
+      education: 0,
     },
     matchedSkills: [],
     missingSkills: [],
-    strengths: ['Baseline match estimate generated.'],
-    gaps: ['Provide fuller resume and job description for better match quality.'],
-    recommendation: 'Improve profile details and re-run analysis.',
+    strengths: [],
+    gaps: ['Could not extract skills from the job description. Please provide a more detailed job description.'],
+    recommendation: 'Could not extract skills from the job description. Please provide a more detailed job description.',
     atsKeywords: [],
   };
 
@@ -685,12 +751,14 @@ ${promptResumeText}`;
  * Match resume against a job description and return detailed scoring
  */
 async function matchJobDescription(resumeData, jobDescription) {
+  const fallbackMatch = buildFallbackMatchResult(resumeData, jobDescription);
+
   if (!isAnthropicConfigured()) {
     logAiDebug('Job matching using fallback mode', {
       reason: 'GROQ_API_KEY is missing or empty',
       jobDescriptionLength: String(jobDescription || '').length,
     });
-    return buildFallbackMatchResult(resumeData, jobDescription);
+    return fallbackMatch;
   }
 
   try {
@@ -701,10 +769,15 @@ Critical rules:
 - Output must be a single valid JSON object only. No prose, no markdown, no comments.
 - Use exactly the keys and nesting shown below. Do not add extra keys.
 - Use only the provided candidate fields and job description. Do not invent credentials, projects, education, or skills.
+- First extract required skills from the job description.
+- Then compare those required skills to the candidate resume data.
+- matchedSkills must contain only overlapping skills.
+- missingSkills must contain only required skills that are absent from the candidate.
+- overallScore must be calculated from actual overlap, not a generic estimate.
 - scoring must be internally consistent:
   - overallScore must be an integer from 0 to 100.
   - each breakdown value must be an integer from 0 to 100.
-  - overallScore should align with breakdown values (rough weighted logic: technicalSkills 45%, experience 25%, keywords 20%, education 10%).
+  - if the job description does not contain enough meaningful signals, set overallScore to 0 and return empty matchedSkills and missingSkills.
 - matchedSkills: include only skills clearly present in BOTH candidate data and JD.
 - missingSkills: include only JD-required skills not present in candidate data.
 - strengths and gaps: write evidence-based, specific statements only.
@@ -731,6 +804,7 @@ ${promptJobDescription}
 Return JSON with exactly this structure:
 {
   "overallScore": 78,
+  "jobSkills": ["React", "Node.js", "Docker"],
   "breakdown": {
     "technicalSkills": 85,
     "experience": 70,
@@ -779,16 +853,29 @@ Return JSON with exactly this structure:
       content: response?.choices?.[0]?.message?.content,
     });
 
-    const fallbackMatch = buildFallbackMatchResult(resumeData, jobDescription);
     const parsed = parseModelJsonOrFallback(response, {
       flowName: 'job-match',
       fallbackFactory: () => fallbackMatch,
     });
     const normalized = normalizeMatchResult(parsed, fallbackMatch);
-    logAiDebug('Match parsed result', normalized);
-    return normalized;
+    const finalMatch = {
+      ...normalized,
+      overallScore: fallbackMatch.overallScore,
+      breakdown: fallbackMatch.breakdown,
+      matchedSkills: fallbackMatch.matchedSkills.length ? fallbackMatch.matchedSkills : normalized.matchedSkills,
+      missingSkills: fallbackMatch.missingSkills.length ? fallbackMatch.missingSkills : normalized.missingSkills,
+      strengths: normalized.strengths.length ? normalized.strengths : fallbackMatch.strengths,
+      gaps: normalized.gaps.length ? normalized.gaps : fallbackMatch.gaps,
+      recommendation: normalized.recommendation || fallbackMatch.recommendation,
+      atsKeywords: normalized.atsKeywords.length ? normalized.atsKeywords : fallbackMatch.atsKeywords,
+    };
+    logAiDebug('Match parsed result', finalMatch);
+    return finalMatch;
   } catch (err) {
-    throw mapAnthropicError(err);
+    logAiDebug('Match parse failed, using deterministic fallback', {
+      error: err?.message,
+    });
+    return fallbackMatch;
   }
 }
 
@@ -891,4 +978,4 @@ Return JSON with exactly this structure:
   }
 }
 
-module.exports = { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured };
+module.exports = { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured, isMeaningfulJobDescription };

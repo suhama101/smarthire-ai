@@ -46,6 +46,45 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
+function isMeaningfulJobDescription(value) {
+  const text = String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  if (text.length < 20) {
+    return false;
+  }
+
+  const words = text.replace(/[^a-z0-9+#.\-/\s]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length < 4) {
+    return false;
+  }
+
+  const signalTerms = [
+    'experience',
+    'required',
+    'skills',
+    'responsibilities',
+    'qualifications',
+    'build',
+    'develop',
+    'design',
+    'maintain',
+    'testing',
+    'deploy',
+    'cloud',
+    'database',
+    'api',
+    'frontend',
+    'backend',
+    'git',
+  ];
+
+  if (signalTerms.some((term) => text.includes(term))) {
+    return true;
+  }
+
+  return words.filter((word) => signalTerms.includes(word)).length >= 3;
+}
+
 function getInitials(name) {
   const text = String(name || '').trim();
   if (!text) {
@@ -264,8 +303,8 @@ export default function HomePage() {
       return;
     }
 
-    if (!jobDescription.trim()) {
-      setMatchError('Please enter a job description.');
+    if (!isMeaningfulJobDescription(jobDescription)) {
+      setMatchError('Please enter a valid job description to get accurate results');
       return;
     }
 
@@ -329,9 +368,12 @@ export default function HomePage() {
   const summary = analysisResult?.resumeData?.summary;
   const skills = analysisResult?.resumeData?.technicalSkills || [];
   const overallScore = clampScore(matchResult?.overallScore);
-  const scoreStyles = scoreTheme(overallScore);
   const missingCount = (matchResult?.missingSkills || []).length;
   const matchedCount = (matchResult?.matchedSkills || []).length;
+  const hasSkillSignals = matchedCount > 0 || missingCount > 0;
+  const scoreStyles = matchResult
+    ? (hasSkillSignals ? scoreTheme(overallScore) : { ...scoreTheme(0), label: 'No skill signals' })
+    : scoreTheme(0);
   const topSkills = skills.slice(0, 6);
   const matchedSkills = (matchResult?.matchedSkills || []).slice(0, 6);
   const missingSkills = (matchResult?.missingSkills || []).slice(0, 6);

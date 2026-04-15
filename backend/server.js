@@ -34,7 +34,7 @@ function isLocalDevelopmentOrigin(origin) {
 
 function shouldAllowLocalhostFallback(rawOrigins) {
 	if (!rawOrigins) {
-		return true;
+		return false;
 	}
 
 	return rawOrigins
@@ -43,11 +43,20 @@ function shouldAllowLocalhostFallback(rawOrigins) {
 		.some((origin) => origin.includes('your-frontend.example.com'));
 }
 
+function isVercelOrigin(origin) {
+	try {
+		const url = new URL(origin);
+		return url.hostname.endsWith('.vercel.app') || url.hostname.endsWith('.vercel.sh');
+	} catch {
+		return false;
+	}
+}
+
 function getAllowedOrigins() {
 	const rawOrigins = String(process.env.CORS_ORIGINS || '').trim();
 
 	if (!rawOrigins) {
-		return NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+		return [];
 	}
 
 	return rawOrigins.split(',').map((origin) => normalizeOrigin(origin)).filter(Boolean);
@@ -77,6 +86,10 @@ app.use(cors({
 		}
 
 		if (allowLocalhostFallback && isLocalDevelopmentOrigin(normalizedOrigin)) {
+			return callback(null, true);
+		}
+
+		if (isVercelOrigin(normalizedOrigin)) {
 			return callback(null, true);
 		}
 
