@@ -1,6 +1,10 @@
 const axios = require('axios');
 
-const baseURL = String(process.env.API_BASE_URL || process.env.BACKEND_URL || 'http://localhost:5000')
+const baseURL = String(process.env.API_BASE_URL || process.env.BACKEND_API_URL || process.env.BACKEND_URL || '').trim();
+
+if (!baseURL) {
+  throw new Error('Set API_BASE_URL or BACKEND_API_URL before running auth-api-test.js');
+}
   .trim()
   .replace(/\/$/, '');
 

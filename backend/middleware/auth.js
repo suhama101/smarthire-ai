@@ -1,6 +1,14 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'smarthire_dev_secret';
+function getJwtSecret() {
+  const secret = String(process.env.JWT_SECRET || '').trim();
+
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured.');
+  }
+
+  return secret;
+}
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -11,7 +19,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
 
     req.user = decoded; // { id, email, role }
     next();

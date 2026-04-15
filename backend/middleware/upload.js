@@ -1,4 +1,5 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const multer = require('multer');
 
@@ -10,7 +11,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'text/markdown',
 ]);
 
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+const uploadsDir = path.join(os.tmpdir(), 'smarthire-ai-uploads');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });

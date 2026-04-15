@@ -2,6 +2,29 @@ const AUTH_SESSION_KEY = 'smarthire.auth';
 const AUTH_COOKIE_NAME = 'smarthire.auth';
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
+function getCookieAttributes(isClearing = false) {
+  const isSecureContext = typeof window !== 'undefined'
+    ? window.location.protocol === 'https:'
+    : process.env.NODE_ENV === 'production';
+
+  const sameSite = isSecureContext ? 'none' : 'lax';
+  const parts = ['path=/'];
+
+  if (isClearing) {
+    parts.push('max-age=0');
+  } else {
+    parts.push(`max-age=${AUTH_COOKIE_MAX_AGE}`);
+  }
+
+  parts.push(`samesite=${sameSite}`);
+
+  if (isSecureContext) {
+    parts.push('secure');
+  }
+
+  return parts.join('; ');
+}
+
 function readCookie(name) {
   if (typeof document === 'undefined') {
     return null;
@@ -41,7 +64,7 @@ function updateAuthCookie(token) {
     return;
   }
 
-  document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; samesite=lax`;
+  document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; ${getCookieAttributes(false)}`;
 }
 
 function clearAuthCookie() {
@@ -49,7 +72,7 @@ function clearAuthCookie() {
     return;
   }
 
-  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; samesite=lax`;
+  document.cookie = `${AUTH_COOKIE_NAME}=; ${getCookieAttributes(true)}`;
 }
 
 export function persistAuthSession(session) {

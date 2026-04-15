@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { getApiBaseUrl, getApiUrl } from '../../src/lib/api';
 
 const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt';
 
@@ -70,7 +71,7 @@ function normalizeCandidates(payload) {
 }
 
 export default function BatchResumeUploadPage() {
-  const apiUrl = useMemo(() => '/api', []);
+  const apiUrl = useMemo(() => getApiBaseUrl(), []);
   const fileInputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [jobDescription, setJobDescription] = useState('');
@@ -148,7 +149,7 @@ export default function BatchResumeUploadPage() {
         formData.append('resumes', file);
       });
 
-      const response = await axios.post(`${apiUrl}/batch/analyze`, formData, {
+      const response = await axios.post(getApiUrl('batch/analyze'), formData, {
         timeout: 120000,
       });
 

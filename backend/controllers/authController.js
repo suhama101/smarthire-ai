@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 const { z } = require('zod');
 const { getSupabaseClient } = require('../services/supabaseClient');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'smarthire_dev_secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // In-memory fallback store when Supabase is not configured
@@ -12,6 +11,16 @@ const memoryUsers = new Map();
 
 function getDbClient() {
   return getSupabaseClient();
+}
+
+function getJwtSecret() {
+  const secret = String(process.env.JWT_SECRET || '').trim();
+
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured.');
+  }
+
+  return secret;
 }
 
 // ---------- Validation Schemas ----------
@@ -47,7 +56,7 @@ function isUniqueConstraintError(error) {
 const generateToken = (user) => {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: JWT_EXPIRES_IN }
   );
 };

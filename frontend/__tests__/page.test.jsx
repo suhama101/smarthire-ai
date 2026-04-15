@@ -7,6 +7,7 @@ jest.mock('axios');
 describe('HomePage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.NEXT_PUBLIC_API_URL = 'https://railway-backend.example.com';
     axios.get.mockResolvedValue({
       data: { timestamp: '2026-04-06T12:00:00.000Z' },
     });
@@ -21,7 +22,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('link', { name: 'Signup' })).toHaveAttribute('href', '/signup');
 
     await waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith('/api/health');
+      expect(axios.get).toHaveBeenCalledWith('https://railway-backend.example.com/api/health');
       expect(screen.getByText(/API healthy at/i)).toBeInTheDocument();
     });
   });

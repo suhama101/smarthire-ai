@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
+const { randomUUID } = require('crypto');
 const { authMiddleware } = require('../middleware/auth');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'smarthire_dev_secret';
+const originalJwtSecret = process.env.JWT_SECRET;
 
 function createResponse() {
   const res = {};
@@ -18,6 +19,14 @@ function createResponse() {
 }
 
 describe('requireAuth middleware', () => {
+  beforeEach(() => {
+    process.env.JWT_SECRET = `test-${randomUUID()}`;
+  });
+
+  afterAll(() => {
+    process.env.JWT_SECRET = originalJwtSecret;
+  });
+
   test('rejects requests without a bearer token', () => {
     const req = { headers: {} };
     const res = createResponse();
@@ -42,7 +51,11 @@ describe('requireAuth middleware', () => {
   });
 
   test('accepts a valid JWT and attaches the user payload', () => {
-    const token = jwt.sign({ id: 'user-123', email: 'user@example.com', role: 'candidate' }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { id: 'user-123', email: 'user@example.com', role: 'candidate' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
     const req = { headers: { authorization: `Bearer ${token}` } };
     const res = createResponse();
     const next = jest.fn();

@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function getBackendBaseUrl() {
-  const value = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL;
+  const value = process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || process.env.BACKEND_API_URL;
 
   if (!value) {
     throw new Error('BACKEND_API_URL is not configured.');

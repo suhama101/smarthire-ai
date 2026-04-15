@@ -63,6 +63,20 @@ Important:
 4. Deploy.
 5. If using preview deployments, add each preview domain (or a stable custom frontend domain) to backend `CORS_ORIGINS`.
 
+## Automatic Updates On Push
+
+Once the Vercel project is connected to this Git repository, Vercel will redeploy automatically on every push to the configured production branch.
+
+To keep the same production URL updating automatically:
+
+1. In Vercel, open the project settings for the frontend app.
+2. Confirm the Git integration is connected to the correct repository.
+3. Set the production branch to the branch you actually push to, usually `main`.
+4. Keep the project root as `frontend` so Vercel builds the Next.js app from the right folder.
+5. Push code to the production branch. Vercel will build and update the same live URL automatically.
+
+If you push to a different branch, Vercel creates a preview deployment instead of replacing the production URL.
+
 ## Post-Deploy Verification
 
 Run these from the deployed frontend UI:

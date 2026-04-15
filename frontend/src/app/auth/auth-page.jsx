@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { persistAuthSession } from '../../lib/auth-session';
+import { getApiUrl } from '../../lib/api';
 
 export default function AuthPage({ mode }) {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function AuthPage({ mode }) {
     setError('');
 
     try {
-      const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+      const endpoint = isSignup ? getApiUrl('auth/signup') : getApiUrl('auth/login');
       const payload = isSignup
         ? {
             email: email.trim(),

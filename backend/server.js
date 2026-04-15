@@ -19,6 +19,8 @@ const PORT = Number(process.env.PORT) || 5000;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+const DEVELOPMENT_ORIGINS = new Set(['http://localhost:3000', 'http://localhost:3001']);
+
 function normalizeOrigin(origin) {
 	return String(origin || '').trim().replace(/\/$/, '');
 }
@@ -26,27 +28,7 @@ function normalizeOrigin(origin) {
 function isLocalDevelopmentOrigin(origin) {
 	try {
 		const url = new URL(origin);
-		return ['localhost', '127.0.0.1'].includes(url.hostname);
-	} catch {
-		return false;
-	}
-}
-
-function shouldAllowLocalhostFallback(rawOrigins) {
-	if (!rawOrigins) {
-		return false;
-	}
-
-	return rawOrigins
-		.split(',')
-		.map((origin) => normalizeOrigin(origin))
-		.some((origin) => origin.includes('your-frontend.example.com'));
-}
-
-function isVercelOrigin(origin) {
-	try {
-		const url = new URL(origin);
-		return url.hostname.endsWith('.vercel.app') || url.hostname.endsWith('.vercel.sh');
+		return DEVELOPMENT_ORIGINS.has(`${url.protocol}//${url.host}`);
 	} catch {
 		return false;
 	}
@@ -56,22 +38,20 @@ function getAllowedOrigins() {
 	const rawOrigins = String(process.env.CORS_ORIGINS || '').trim();
 
 	if (!rawOrigins) {
-		return [];
+		return NODE_ENV === 'production' ? [] : Array.from(DEVELOPMENT_ORIGINS);
 	}
 
-	return rawOrigins.split(',').map((origin) => normalizeOrigin(origin)).filter(Boolean);
+	return rawOrigins
+		.split(',')
+		.map((origin) => normalizeOrigin(origin))
+		.filter(Boolean);
 }
 
 const app = express();
 
 app.disable('x-powered-by');
 
-const rawCorsOrigins = String(process.env.CORS_ORIGINS || '').trim();
-
 const allowedOrigins = getAllowedOrigins();
-
-const allowLocalhostFallback = shouldAllowLocalhostFallback(rawCorsOrigins);
-
 app.use(cors({
 	credentials: false,
 	origin(origin, callback) {
@@ -85,19 +65,14 @@ app.use(cors({
 			return callback(null, true);
 		}
 
-		if (allowLocalhostFallback && isLocalDevelopmentOrigin(normalizedOrigin)) {
+		if (NODE_ENV !== 'production' && isLocalDevelopmentOrigin(normalizedOrigin)) {
 			return callback(null, true);
 		}
 
-		if (isVercelOrigin(normalizedOrigin)) {
-			return callback(null, true);
-		}
-
-		if (NODE_ENV !== 'production' && allowedOrigins.length === 0) {
-			return callback(null, true);
-		}
-
-		return callback(new Error('CORS origin not allowed'));
+		const corsError = new Error('CORS origin not allowed');
+		corsError.status = 403;
+		corsError.code = 'CORS_BLOCKED';
+		return callback(corsError);
 	},
 }));
 

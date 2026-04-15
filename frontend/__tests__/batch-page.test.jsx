@@ -7,6 +7,7 @@ jest.mock('axios');
 describe('BatchResumeUploadPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.NEXT_PUBLIC_API_URL = 'https://railway-backend.example.com';
     axios.post.mockResolvedValue({
       data: {
         message: 'Batch analysis complete',
@@ -51,7 +52,7 @@ describe('BatchResumeUploadPage', () => {
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
-      expect(axios.post).toHaveBeenCalledWith('/api/batch/analyze', expect.any(FormData), expect.any(Object));
+      expect(axios.post).toHaveBeenCalledWith('https://railway-backend.example.com/api/batch/analyze', expect.any(FormData), expect.any(Object));
       expect(screen.getByText('Ava Chen')).toBeInTheDocument();
       expect(screen.getByText('Noah Patel')).toBeInTheDocument();
     });
@@ -80,7 +81,7 @@ describe('BatchResumeUploadPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analyze batch' }));
 
     expect(axios.post).not.toHaveBeenCalled();
-    expect(screen.getAllByText('Please enter a job description before analyzing resumes')).toHaveLength(2);
+    expect(screen.getAllByText('Please enter a valid job description to get accurate results')).toHaveLength(2);
     expect(textarea).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Enter a job description to enable candidate ranking.')).toBeInTheDocument();
   });

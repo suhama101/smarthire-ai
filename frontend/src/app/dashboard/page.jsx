@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, FileText, RefreshCw, Target, Users } from 'lucide-react';
 import axios from 'axios';
 import { readStoredAuth } from '../../lib/auth-session';
+import { getApiUrl } from '../../lib/api';
 import ScoreTrendChart from './components/ScoreTrendChart';
 import SkillGapChart from './components/SkillGapChart';
 import SkillsPieChart from './components/SkillsPieChart';
@@ -99,7 +100,7 @@ export default function DashboardPage() {
       }
 
       try {
-        const response = await axios.get('/api/history/stats');
+        const response = await axios.get(getApiUrl('history/stats'));
 
         if (!isMounted) {
           return;

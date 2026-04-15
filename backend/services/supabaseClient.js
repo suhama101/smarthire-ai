@@ -135,6 +135,10 @@ function getSupabaseClient() {
   const anonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
   const key = serviceRoleKey || anonKey;
 
+  if (process.env.NODE_ENV === 'production' && (!url || !key)) {
+    throw new Error('Supabase credentials are not configured.');
+  }
+
   if (url && key) {
     cachedClient = createClient(url, key);
     cachedClient.__isMemory = false;

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import { clearAuthSession, readStoredAuth } from '../src/lib/auth-session';
+import { getApiBaseUrl, getApiUrl } from '../src/lib/api';
 
 function scoreTheme(score) {
   if (score >= 80) {
@@ -99,7 +100,7 @@ function getInitials(name) {
 }
 
 export default function HomePage() {
-  const apiUrl = '/api';
+  const apiUrl = getApiBaseUrl();
   const [health, setHealth] = useState('Checking API...');
   const [workspaceMode, setWorkspaceMode] = useState('candidate');
   const [authToken, setAuthToken] = useState('');
@@ -154,7 +155,7 @@ export default function HomePage() {
     let mounted = true;
 
     axios
-      .get(`${apiUrl}/health`)
+      .get(getApiUrl('health'))
       .then((data) => {
         if (!mounted) {
           return;
@@ -181,7 +182,7 @@ export default function HomePage() {
     let mounted = true;
 
     axios
-      .get(`${apiUrl}/auth/profile`, {
+      .get(getApiUrl('auth/profile'), {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -220,7 +221,7 @@ export default function HomePage() {
     setAuthStatus('Refreshing profile...');
 
     try {
-      const response = await axios.get(`${apiUrl}/auth/profile`, {
+      const response = await axios.get(getApiUrl('auth/profile'), {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -277,7 +278,7 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append('resume', file);
 
-      const response = await axios.post(`${apiUrl}/analyze/resume`, formData, {
+      const response = await axios.post(getApiUrl('analyze/resume'), formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -316,7 +317,7 @@ export default function HomePage() {
     setIsMatching(true);
 
     try {
-      const response = await axios.post(`${apiUrl}/analyze/match`, {
+      const response = await axios.post(getApiUrl('analyze/match'), {
         analysisId,
         jobTitle,
         companyName,
@@ -350,7 +351,7 @@ export default function HomePage() {
     setIsGeneratingPlan(true);
 
     try {
-      const response = await axios.post(`${apiUrl}/analyze/learning-plan`, {
+      const response = await axios.post(getApiUrl('analyze/learning-plan'), {
         missingSkills: matchResult.missingSkills,
         targetRole: targetRole.trim(),
         yearsExperience: analysisResult?.resumeData?.yearsExperience || 1,
