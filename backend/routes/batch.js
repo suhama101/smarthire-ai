@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const { uploadBatch } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
-const { extractResumeData, matchJobDescription, isAnthropicConfigured, isMeaningfulJobDescription } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, isAnthropicConfigured } = require('../services/claudeService');
 
 const router = express.Router();
 const DEFAULT_USER_ID = 'public-user';
@@ -44,10 +44,6 @@ router.post('/analyze', uploadBatch, async (req, res, next) => {
 
   if (!jobDescription) {
     return res.status(400).json({ error: 'Job description is required to analyze and rank candidates' });
-  }
-
-  if (!isMeaningfulJobDescription(jobDescription)) {
-    return res.status(400).json({ error: 'Please enter a valid job description to get accurate results' });
   }
 
   console.info('[batch/analyze] request received', {

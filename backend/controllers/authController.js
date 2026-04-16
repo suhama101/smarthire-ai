@@ -41,7 +41,7 @@ function usesRealSupabase(client) {
 }
 
 function createUserId() {
-  return `user_${randomUUID()}`;
+  return randomUUID();
 }
 
 function isNoRowFoundError(error) {

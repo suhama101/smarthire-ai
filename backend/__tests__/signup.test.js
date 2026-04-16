@@ -8,6 +8,16 @@ jest.mock('../services/supabaseClient', () => ({
 const { getSupabaseClient } = require('../services/supabaseClient');
 const authRoutes = require('../routes/auth');
 
+const originalJwtSecret = process.env.JWT_SECRET;
+
+beforeAll(() => {
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
+});
+
+afterAll(() => {
+  process.env.JWT_SECRET = originalJwtSecret;
+});
+
 function createApp() {
   const app = express();
   app.use(express.json());
@@ -71,7 +81,7 @@ describe('signup route', () => {
     });
     expect(insertBuilder.insert).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: expect.stringMatching(/^user_/),
+        id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
         email: 'test@example.com',
         full_name: 'Test User',
         role: 'candidate',
