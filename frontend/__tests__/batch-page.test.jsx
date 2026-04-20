@@ -7,7 +7,7 @@ jest.mock('axios');
 describe('BatchResumeUploadPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NEXT_PUBLIC_API_URL = 'https://railway-backend.example.com';
+    process.env.NEXT_PUBLIC_API_URL = 'https://frontend-proxy.example.com';
     axios.post.mockResolvedValue({
       data: {
         message: 'Batch analysis complete',
@@ -52,7 +52,7 @@ describe('BatchResumeUploadPage', () => {
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
-      expect(axios.post).toHaveBeenCalledWith('https://railway-backend.example.com/api/batch/analyze', expect.any(FormData), expect.any(Object));
+      expect(axios.post).toHaveBeenCalledWith('/api/batch/analyze', expect.any(FormData), expect.any(Object));
       expect(screen.getByText('Ava Chen')).toBeInTheDocument();
       expect(screen.getByText('Noah Patel')).toBeInTheDocument();
     });

@@ -15,7 +15,7 @@ export function getFrontendOrigin() {
 }
 
 export function getApiBaseUrl() {
-  return `${getFrontendOrigin()}/api`;
+  return '/api';
 }
 
 export function getApiUrl(path = '') {
