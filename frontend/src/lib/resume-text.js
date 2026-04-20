@@ -5,10 +5,6 @@ function getExtension(fileName = '') {
 async function extractPdfText(arrayBuffer) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-  if (pdfjs?.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
-  }
-
   const document = await pdfjs.getDocument({ data: arrayBuffer, useWorkerFetch: false }).promise;
   const pages = [];
 
