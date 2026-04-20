@@ -9,7 +9,6 @@ import {
   BarChart3,
   CheckCircle2,
   Download,
-  Eye,
   Filter,
   FolderInput,
   Loader2,
@@ -199,7 +198,17 @@ function ResultRow({ row, expanded, onToggle }) {
     <>
       <tr className="transition hover:bg-white/5">
         <td className="px-4 py-4 font-medium text-[#F1F1F3]">{row.displayRank}</td>
-        <td className="px-4 py-4 text-[#F1F1F3]">{row.candidateName}</td>
+        <td className="px-4 py-4 text-[#F1F1F3]">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`View full profile for ${row.candidateName}`}
+            className="text-left"
+          >
+            <span className="block font-medium text-[#F1F1F3]">{row.candidateName}</span>
+            <span className="block text-xs text-[#8B8B9E]">{expanded ? 'Hide full profile' : 'View full profile'}</span>
+          </button>
+        </td>
         <td className="px-4 py-4">
           <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${scoreTone(Number(row.matchScore))}`}>
             {Math.round(Number(row.matchScore))}%
@@ -208,29 +217,14 @@ function ResultRow({ row, expanded, onToggle }) {
         <td className="px-4 py-4 text-[#8B8B9E]">{(row.matchedSkills || []).length}</td>
         <td className="px-4 py-4 text-[#8B8B9E]">{(row.missingSkills || []).length}</td>
         <td className="px-4 py-4">
-          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${experienceTone(row.experienceFit)}`}>
-            {row.experienceFit}
-          </span>
-        </td>
-        <td className="px-4 py-4">
           <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${recommendationTone(normalizeRecommendationGroup(row.recommendation, Number(row.matchScore)))}`}>
             {normalizeRecommendationGroup(row.recommendation, Number(row.matchScore))}
           </span>
         </td>
-        <td className="px-4 py-4">
-          <button
-            type="button"
-            onClick={onToggle}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0F0F13] px-3 py-2 text-xs font-semibold text-[#F1F1F3] transition hover:bg-white/5"
-          >
-            <Eye className="h-4 w-4" />
-            {expanded ? 'Hide Full Profile' : 'View Full Profile'}
-          </button>
-        </td>
       </tr>
       {expanded ? (
         <tr className="bg-[#111827]">
-          <td colSpan={8} className="px-4 py-5">
+          <td colSpan={6} className="px-4 py-5">
             <div className="rounded-2xl border border-white/10 bg-[#0F0F13] p-4">
               <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div>
@@ -893,7 +887,6 @@ export default function BatchResumeUploadPage() {
                               </button>
                             </th>
                           ))}
-                          <th className="px-4 py-3 font-semibold">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/10 bg-[#1A1A24]">
@@ -908,7 +901,7 @@ export default function BatchResumeUploadPage() {
                           ))
                         ) : (
                           <tr>
-                            <td className="px-4 py-6 text-sm text-[#8B8B9E]" colSpan={8}>
+                            <td className="px-4 py-6 text-sm text-[#8B8B9E]" colSpan={6}>
                               No matching candidates found. Adjust the filters or search by name.
                             </td>
                           </tr>
