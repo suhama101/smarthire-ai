@@ -418,11 +418,10 @@ export default function BatchResumeUploadPage() {
     event.preventDefault();
 
     const jobTitle = sanitizeText(jobForm.jobTitle);
-    const companyName = sanitizeText(jobForm.companyName);
     const jobDescription = sanitizeText(jobForm.jobDescription);
 
-    if (!jobTitle || !companyName) {
-      setStepError('Job title and company name are required.');
+    if (!jobTitle || !jobDescription) {
+      setStepError('Job title and job description are required.');
       return;
     }
 
@@ -433,7 +432,7 @@ export default function BatchResumeUploadPage() {
 
     setStepError('');
     setError('');
-    setSavedJob({ jobTitle, companyName, jobDescription });
+    setSavedJob({ jobTitle, companyName: sanitizeText(jobForm.companyName) || 'Recruiter Batch', jobDescription });
   }
 
   function resetJobDetails() {
@@ -467,7 +466,7 @@ export default function BatchResumeUploadPage() {
       const fileEntry = workingFiles[index];
 
       setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Processing' } : item)));
-      setProgress({ current: index + 1, total: workingFiles.length, label: `Analyzing ${index + 1} of ${workingFiles.length} resumes...` });
+      setProgress({ current: index + 1, total: workingFiles.length, label: `Processing ${index + 1} of ${workingFiles.length} resumes...` });
 
       try {
         const resumeText = await extractResumeTextFromFile(fileEntry.file);
@@ -677,7 +676,7 @@ export default function BatchResumeUploadPage() {
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-[#F1F1F3]" htmlFor="company-name">
-                    Company Name
+                    Company Name (optional)
                   </label>
                   <input
                     id="company-name"
@@ -804,7 +803,7 @@ export default function BatchResumeUploadPage() {
 
               <div className="mt-5 rounded-2xl border border-white/10 bg-[#0F0F13] p-4">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-[#F1F1F3]">{progress.total ? `Analyzing ${progress.current} of ${progress.total} resumes...` : 'No batch in progress'}</span>
+                  <span className="font-medium text-[#F1F1F3]">{progress.total ? `Processing ${progress.current} of ${progress.total} resumes...` : 'No batch in progress'}</span>
                   <span className="text-[#8B8B9E]">{progress.total ? `${Math.round((progress.current / progress.total) * 100)}%` : '0%'}</span>
                 </div>
                 <div className="mt-3 h-3 rounded-full bg-white/10">
@@ -846,7 +845,7 @@ export default function BatchResumeUploadPage() {
                 <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-[#0F0F13] p-4">
                   <button type="button" onClick={() => downloadTextFile(`${(batchRun.batchName || 'Batch').replace(/[^a-z0-9]+/gi, '_')}_Results.csv`, buildBatchResultsCsv(batchRun.results), 'text/csv;charset=utf-8;')} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90">
                     <Download className="h-4 w-4" />
-                    Export to CSV
+                    Export CSV
                   </button>
                   <button type="button" onClick={handleExportPdf} disabled={isExportingPdf} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#1A1A24] px-4 py-2.5 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50">
                     {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}

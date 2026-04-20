@@ -1,3 +1,7 @@
+// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
+// Value: your Anthropic API key from https://console.anthropic.com
+
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
@@ -125,7 +129,7 @@ ${String(jobDescription || '').trim()}`;
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 2200,
+      max_tokens: 1000,
       temperature: 0,
       messages: [
         {
@@ -165,13 +169,13 @@ export async function POST(request) {
 
     const body = await request.json();
     const jobTitle = sanitizeText(body?.jobTitle);
-    const companyName = sanitizeText(body?.companyName);
     const jobDescription = sanitizeText(body?.jobDescription);
     const resumeText = sanitizeText(body?.resumeText);
     const candidateIndex = Number(body?.candidateIndex || 1);
+    const companyName = sanitizeText(body?.companyName || 'Recruiter Batch');
 
-    if (!jobTitle || !companyName || !jobDescription || !resumeText) {
-      return NextResponse.json({ error: 'jobTitle, companyName, jobDescription, and resumeText are required.' }, { status: 400 });
+    if (!jobTitle || !jobDescription || !resumeText) {
+      return NextResponse.json({ error: 'jobTitle, jobDescription, and resumeText are required.' }, { status: 400 });
     }
 
     const result = await callClaude(jobTitle, companyName, jobDescription, resumeText, candidateIndex);

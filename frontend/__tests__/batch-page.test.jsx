@@ -69,7 +69,7 @@ describe('BatchResumeUploadPage', () => {
     render(<BatchResumeUploadPage />);
 
     await user.type(screen.getByLabelText('Job Title'), 'Senior Frontend Engineer');
-    await user.type(screen.getByLabelText('Company Name'), 'Acme Global');
+    await user.type(screen.getByLabelText(/Company Name/i), 'Acme Global');
     await user.type(
       screen.getByLabelText('Full Job Description'),
       'We need a senior frontend engineer with React, Next.js, CSS architecture, testing, accessibility, and cloud deployment experience. The role owns product delivery, collaboration, and a high quality bar for enterprise customers.'
@@ -96,7 +96,7 @@ describe('BatchResumeUploadPage', () => {
 
     expect(screen.getByText('96%')).toBeInTheDocument();
     expect(screen.getByText('91%')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export to CSV' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export to PDF Report' })).toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: /view full profile/i }).length).toBeGreaterThan(0);
   });
@@ -106,7 +106,7 @@ describe('BatchResumeUploadPage', () => {
     render(<BatchResumeUploadPage />);
 
     await user.type(screen.getByLabelText('Job Title'), 'Senior Frontend Engineer');
-    await user.type(screen.getByLabelText('Company Name'), 'Acme Global');
+    await user.type(screen.getByLabelText(/Company Name/i), 'Acme Global');
     await user.type(screen.getByLabelText('Full Job Description'), 'Too short');
     await user.click(screen.getByRole('button', { name: 'Save & Continue' }));
 

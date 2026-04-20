@@ -1,4 +1,10 @@
+// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
+// Value: your Anthropic API key from https://console.anthropic.com
+
 import { NextResponse } from 'next/server';
+import Busboy from 'busboy';
+import { Readable } from 'node:stream';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
@@ -16,39 +22,109 @@ function getFileExtension(fileName = '') {
 }
 
 async function extractPdfText(buffer) {
-  const pdfParseModule = await import('pdf-parse');
-  const pdfParse = pdfParseModule.default || pdfParseModule;
-  const result = await pdfParse(buffer);
-  return result?.text || '';
+  try {
+    const pdfParseModule = await import('pdf-parse');
+    const pdfParse = pdfParseModule.default || pdfParseModule;
+    const result = await pdfParse(buffer);
+    return String(result?.text || '').replace(/\s+/g, ' ').trim();
+  } catch {
+    return Buffer.from(buffer).toString('utf8').replace(/\s+/g, ' ').trim();
+  }
 }
 
 async function extractDocxText(buffer) {
-  const mammothModule = await import('mammoth');
-  const mammoth = mammothModule.default || mammothModule;
-  const result = await mammoth.extractRawText({ buffer });
-  return result?.value || '';
+  try {
+    const mammothModule = await import('mammoth');
+    const mammoth = mammothModule.default || mammothModule;
+    const result = await mammoth.extractRawText({ buffer });
+    return String(result?.value || '').replace(/\s+/g, ' ').trim();
+  } catch {
+    return Buffer.from(buffer).toString('utf8').replace(/\s+/g, ' ').trim();
+  }
 }
 
-async function extractTextFromFile(file) {
-  const extension = getFileExtension(file?.name || '');
-  const mimeType = String(file?.type || '').toLowerCase();
+async function extractTextFromUpload(upload) {
+  const extension = getFileExtension(upload?.filename || '');
+  const mimeType = String(upload?.mimeType || '').toLowerCase();
+  const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
 
   if (mimeType === 'application/pdf' || extension === '.pdf') {
-    return extractPdfText(Buffer.from(await file.arrayBuffer()));
+    return extractPdfText(buffer);
   }
 
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     extension === '.docx'
   ) {
-    return extractDocxText(Buffer.from(await file.arrayBuffer()));
+    return extractDocxText(buffer);
   }
 
   if (mimeType === 'text/plain' || mimeType === 'text/markdown' || extension === '.txt' || extension === '.md') {
-    return file.text();
+    return buffer.toString('utf8').replace(/\s+/g, ' ').trim();
   }
 
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
+}
+
+function parseMultipartRequest(request) {
+  return new Promise((resolve, reject) => {
+    const headers = Object.fromEntries(request.headers.entries());
+    const busboy = Busboy({
+      headers,
+      limits: {
+        files: 1,
+        fileSize: MAX_RESUME_SIZE_BYTES,
+      },
+    });
+
+    const fields = {};
+    let fileUpload = null;
+    let fileTooLarge = false;
+
+    busboy.on('field', (fieldName, value) => {
+      fields[fieldName] = value;
+    });
+
+    busboy.on('file', (fieldName, fileStream, info) => {
+      if (fieldName !== 'resume' || fileUpload) {
+        fileStream.resume();
+        return;
+      }
+
+      const chunks = [];
+      const filename = info?.filename || '';
+      const mimeType = info?.mimeType || '';
+
+      fileStream.on('data', (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      fileStream.on('limit', () => {
+        fileTooLarge = true;
+      });
+
+      fileStream.on('end', () => {
+        fileUpload = {
+          fieldName,
+          filename,
+          mimeType,
+          buffer: Buffer.concat(chunks),
+        };
+      });
+
+      fileStream.on('error', reject);
+    });
+
+    busboy.on('error', reject);
+    busboy.on('finish', () => resolve({ fields, fileUpload, fileTooLarge }));
+
+    if (!request.body) {
+      reject(new Error('Request body is empty.'));
+      return;
+    }
+
+    Readable.fromWeb(request.body).on('error', reject).pipe(busboy);
+  });
 }
 
 function normalizeArray(values) {
@@ -131,7 +207,7 @@ ${String(resumeText || '').slice(0, 24000)}`;
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 1600,
+      max_tokens: 1000,
       temperature: 0,
       messages: [
         {
@@ -170,18 +246,23 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds || 1) } });
     }
 
-    const formData = await request.formData();
-    const file = formData.get('resume');
+    const contentType = request.headers.get('content-type') || '';
 
-    if (!file || typeof file !== 'object' || typeof file.arrayBuffer !== 'function') {
+    if (!contentType.includes('multipart/form-data')) {
       return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
     }
 
-    if (file.size > MAX_RESUME_SIZE_BYTES) {
-      return NextResponse.json({ error: 'File is too large. Please choose a file under 4MB.' }, { status: 413 });
+    const { fileUpload, fileTooLarge } = await parseMultipartRequest(request);
+
+    if (fileTooLarge) {
+      return NextResponse.json({ error: 'File too large. Max 4MB.' }, { status: 413 });
     }
 
-    const fileName = String(file.name || '');
+    if (!fileUpload?.buffer?.length) {
+      return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
+    }
+
+    const fileName = String(fileUpload.filename || '');
     const extension = getFileExtension(fileName);
     const allowedExtensions = new Set(['.pdf', '.docx', '.txt', '.md']);
 
@@ -189,7 +270,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
     }
 
-    const extractedText = sanitizeText(await extractTextFromFile(file));
+    const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
 
     if (!extractedText) {
       return NextResponse.json({ error: 'Analysis failed. Please try again.' }, { status: 422 });
@@ -210,12 +291,15 @@ export async function POST(request) {
     const message = error?.message || 'Analysis failed. Please try again.';
     const status = Number(error?.status) || 500;
     const isAuthIssue = message.includes('ANTHROPIC_API_KEY');
+    const isTooLarge = /too large|file size/i.test(message) || status === 413;
     const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
 
     return NextResponse.json(
       {
         error: isAuthIssue
           ? message
+          : isTooLarge
+            ? 'File too large. Max 4MB.'
           : isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
             : 'Analysis failed. Please try again.',

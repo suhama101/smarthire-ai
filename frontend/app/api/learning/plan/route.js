@@ -1,3 +1,7 @@
+// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
+// Value: your Anthropic API key from https://console.anthropic.com
+
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';

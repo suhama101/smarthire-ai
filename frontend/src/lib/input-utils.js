@@ -31,7 +31,7 @@ export function validateResumeFile(file) {
   }
 
   if (Number(file.size) > MAX_FILE_SIZE_BYTES) {
-    return { valid: false, message: 'File too large (max 4MB)' };
+    return { valid: false, message: 'File too large. Max 4MB.' };
   }
 
   return { valid: true, message: '' };
@@ -47,8 +47,12 @@ export function sanitizeFileName(fileName) {
 export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — please check your connection') {
   const responseMessage = String(error?.response?.data?.error || error?.message || '').trim();
 
+  if (/anthropic_api_key|api key/i.test(responseMessage)) {
+    return 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.';
+  }
+
   if (/too large/i.test(responseMessage)) {
-    return 'File too large (max 4MB)';
+    return 'File too large. Max 4MB.';
   }
 
   if (/unsupported file/i.test(responseMessage)) {
