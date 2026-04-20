@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import axios from 'axios';
+import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, FileUp, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
+import { getFriendlyApiError, validateResumeFile } from '../src/lib/input-utils';
 
 const FEATURE_CARDS = [
   {
@@ -52,11 +54,97 @@ const TRUST_POINTS = [
 ];
 
 export default function LandingPage() {
+  const resumeInputRef = useRef(null);
   const [session, setSession] = useState(null);
+  const [healthState, setHealthState] = useState({ status: 'checking', label: 'Checking API...' });
+  const [selectedResume, setSelectedResume] = useState(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState(null);
+  const [resumeError, setResumeError] = useState('');
+  const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
 
   useEffect(() => {
     setSession(readStoredAuth());
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+
+    async function checkHealth() {
+      try {
+        const response = await fetch('/api/health', {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error(`Health check failed with status ${response.status}`);
+        }
+
+        await response.json();
+        setHealthState({ status: 'online', label: 'Online' });
+      } catch {
+        setHealthState({ status: 'offline', label: 'Offline' });
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    checkHealth();
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  function handleResumeDrop(files) {
+    const file = files?.[0] || null;
+
+    setResumeError('');
+    setResumeAnalysis(null);
+
+    if (!file) {
+      setSelectedResume(null);
+      return;
+    }
+
+    const validation = validateResumeFile(file);
+
+    if (!validation.valid) {
+      setSelectedResume(null);
+      setResumeError(validation.message);
+      return;
+    }
+
+    setSelectedResume(file);
+  }
+
+  async function analyzeHomepageResume() {
+    const validation = validateResumeFile(selectedResume);
+
+    if (!validation.valid) {
+      setResumeError(validation.message);
+      return;
+    }
+
+    setIsAnalyzingResume(true);
+    setResumeError('');
+    setResumeAnalysis(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('resume', selectedResume);
+
+      const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
+      setResumeAnalysis(response.data?.resumeData || null);
+    } catch (error) {
+      setResumeError(getFriendlyApiError(error, 'Resume analysis failed.'));
+    } finally {
+      setIsAnalyzingResume(false);
+    }
+  }
 
   return (
     <AuthenticatedShell>
@@ -126,6 +214,101 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+            <article className="rounded-[2rem] border border-white/10 bg-[#111118] p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">System Health</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Live API status</h2>
+                </div>
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+                    healthState.status === 'online'
+                      ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                      : healthState.status === 'offline'
+                        ? 'border-rose-300/30 bg-rose-500/10 text-rose-200'
+                        : 'border-amber-300/30 bg-amber-500/10 text-amber-100'
+                  }`}
+                >
+                  {healthState.status === 'online' ? <Wifi className="h-3.5 w-3.5" /> : healthState.status === 'offline' ? <WifiOff className="h-3.5 w-3.5" /> : <span className="h-2 w-2 rounded-full bg-current" />}
+                  {healthState.label}
+                </span>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-[#B7B7C6]">
+                This checks <span className="font-medium text-white">/api/health</span> directly from the browser, so the homepage reflects the deployed Vercel runtime instead of a cached placeholder.
+              </p>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-[#B7B7C6]">
+                {healthState.status === 'online'
+                  ? 'The API is responding normally and production routes should be reachable.'
+                  : healthState.status === 'offline'
+                    ? 'The API did not respond in time. Check the deployment or route logs.'
+                    : 'Waiting for the initial health response...'}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-white/10 bg-[#111118] p-6">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <FileUp className="h-4 w-4 text-indigo-300" /> Quick Resume Upload
+              </div>
+              <p className="mt-2 text-sm text-[#8B8B9E]">Drag and drop a resume or choose one from your device. Accepted formats: PDF, DOCX, TXT, and MD.</p>
+
+              <div
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  handleResumeDrop(event.dataTransfer.files);
+                }}
+                className="mt-5 rounded-3xl border-2 border-dashed border-white/10 bg-[#0B0B10] p-6 text-center transition hover:border-white/25"
+              >
+                <input
+                  ref={resumeInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md"
+                  className="hidden"
+                  onChange={(event) => {
+                    handleResumeDrop(event.target.files);
+                    event.target.value = '';
+                  }}
+                />
+                <FileUp className="mx-auto h-10 w-10 text-[#8B8B9E]" />
+                <p className="mt-4 text-base font-semibold text-[#F1F1F3]">Drop resumes here or browse your files</p>
+                <p className="mt-2 text-sm text-[#8B8B9E]">We only accept PDF, DOCX, TXT, and MD files.</p>
+                <button
+                  type="button"
+                  onClick={() => resumeInputRef.current?.click()}
+                  className="mt-5 inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90"
+                >
+                  Choose File
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-semibold text-white">Selected file</p>
+                <p className="mt-1 text-sm text-[#8B8B9E]">{selectedResume ? selectedResume.name : 'No file selected yet.'}</p>
+              </div>
+
+              {resumeError ? <p className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{resumeError}</p> : null}
+
+              <button
+                type="button"
+                onClick={analyzeHomepageResume}
+                disabled={!selectedResume || isAnalyzingResume}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                {isAnalyzingResume ? 'Analyzing...' : 'Analyze Resume'}
+              </button>
+
+              {resumeAnalysis ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-[#0B0B10] p-4">
+                  <p className="text-sm font-semibold text-white">Extracted summary</p>
+                  <p className="mt-2 text-sm text-[#B7B7C6]">{resumeAnalysis.summary || 'Summary unavailable.'}</p>
+                  <p className="mt-3 text-sm text-[#B7B7C6]">{resumeAnalysis.email || 'No email extracted'}</p>
+                </div>
+              ) : null}
+            </article>
           </section>
 
           <section id="features" className="mt-16">
