@@ -30,17 +30,6 @@ function getFileExtension(fileName = '') {
   return parts.length > 1 ? `.${parts.pop()}` : '';
 }
 
-async function extractPdfText(buffer) {
-  try {
-    const pdfParseModule = await import('pdf-parse');
-    const pdfParse = pdfParseModule.default || pdfParseModule;
-    const result = await pdfParse(buffer);
-    return String(result?.text || '').replace(/\s+/g, ' ').trim();
-  } catch {
-    return Buffer.from(buffer).toString('utf8').replace(/\s+/g, ' ').trim();
-  }
-}
-
 async function extractDocxText(buffer) {
   try {
     const mammothModule = await import('mammoth');
@@ -57,10 +46,6 @@ async function extractTextFromUpload(upload) {
   const mimeType = String(upload?.mimeType || '').toLowerCase();
   const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
 
-  if (mimeType === 'application/pdf' || extension === '.pdf') {
-    return extractPdfText(buffer);
-  }
-
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     extension === '.docx'
@@ -73,6 +58,36 @@ async function extractTextFromUpload(upload) {
   }
 
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
+}
+
+function buildClaudeContentForUpload(upload, resumeText) {
+  const extension = getFileExtension(upload?.filename || '');
+  const mimeType = String(upload?.mimeType || '').toLowerCase();
+  const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
+
+  if (mimeType === 'application/pdf' || extension === '.pdf') {
+    return [
+      {
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: buffer.toString('base64'),
+        },
+      },
+      {
+        type: 'text',
+        text: 'Extract structured profile data from this resume. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.',
+      },
+    ];
+  }
+
+  return [
+    {
+      type: 'text',
+      text: `Extract structured profile data from this resume text. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.\n\nResume text:\n${String(resumeText || '').slice(0, 24000)}`,
+    },
+  ];
 }
 
 function parseMultipartRequest(request) {
@@ -236,17 +251,18 @@ function extractFallbackProfile(resumeText) {
   });
 }
 
-async function analyzeWithClaude(resumeText) {
+async function analyzeWithClaude(upload, resumeText) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
   if (!apiKey) {
-    return extractFallbackProfile(resumeText);
+    if (String(resumeText || '').trim()) {
+      return extractFallbackProfile(resumeText);
+    }
+
+    const error = new Error('ANTHROPIC_API_KEY not set');
+    error.status = 500;
+    throw error;
   }
-
-  const prompt = `Extract structured profile data from this resume text. Return JSON with fields: name, email, phone, skills (array), experience (array of {title, company, duration, description}), education (array of {degree, institution, year}), summary (2-3 sentence overview)
-
-Resume text:
-${String(resumeText || '').slice(0, 24000)}`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -263,7 +279,7 @@ ${String(resumeText || '').slice(0, 24000)}`;
       messages: [
         {
           role: 'user',
-          content: prompt,
+          content: buildClaudeContentForUpload(upload, resumeText),
         },
       ],
     }),
@@ -321,13 +337,14 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
     }
 
-    const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
+    const isPdfUpload = getFileExtension(fileUpload.filename) === '.pdf' || String(fileUpload.mimeType || '').toLowerCase() === 'application/pdf';
+    const extractedText = isPdfUpload ? '' : sanitizeText(await extractTextFromUpload(fileUpload));
 
-    if (!extractedText) {
+    if (!extractedText && !isPdfUpload) {
       return NextResponse.json({ error: 'Analysis failed. Please try again.' }, { status: 422 });
     }
 
-    const resumeData = await analyzeWithClaude(extractedText);
+    const resumeData = await analyzeWithClaude(fileUpload, extractedText);
 
     return NextResponse.json(
       {

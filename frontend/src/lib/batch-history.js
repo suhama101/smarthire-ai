@@ -64,7 +64,7 @@ export function getTopSkillGap(run) {
 
 export function buildBatchResultsCsv(results) {
   const rows = Array.isArray(results) ? results : [];
-  const header = ['Rank', 'Candidate Name', 'Match Score', 'Missing Skills', 'Recommendation'];
+  const header = ['Rank', 'Candidate Name', 'Match Score', 'Matched Skills', 'Missing Skills', 'Recommendation'];
   const lines = [header.join(',')];
 
   rows.forEach((result, index) => {
@@ -72,6 +72,7 @@ export function buildBatchResultsCsv(results) {
       result.rank || index + 1,
       result.candidateName || result.name || '--',
       `${result.matchScore || 0}%`,
+      (result.matchedSkills || []).join('; '),
       (result.missingSkills || result.skillGap || []).join('; '),
       result.recommendation || '--',
     ].map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`);

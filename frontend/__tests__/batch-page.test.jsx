@@ -1,16 +1,10 @@
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/react';
-import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import BatchResumeUploadPage from '../app/batch/page';
-import { extractResumeTextFromFile } from '../src/lib/resume-text';
 
-jest.mock('axios');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
-}));
-jest.mock('../src/lib/resume-text', () => ({
-  extractResumeTextFromFile: jest.fn(async (file) => `Resume text for ${file.name}`),
 }));
 
 describe('BatchResumeUploadPage', () => {
@@ -22,13 +16,24 @@ describe('BatchResumeUploadPage', () => {
     window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123' }));
     useRouter.mockReturnValue({ replace: replaceMock });
 
-    axios.post.mockImplementation((url, body) => {
-      if (url !== '/api/batch/analyze') {
-        return Promise.reject(new Error(`Unexpected URL ${url}`));
+    global.FileReader = class MockFileReader {
+      constructor() {
+        this.onload = null;
+        this.onerror = null;
+        this.result = '';
       }
 
-      const candidateIndex = body.candidateIndex;
-      const response = candidateIndex === 1
+      readAsDataURL(file) {
+        this.result = `data:${file.type};base64,${btoa(file.name)}`;
+        if (this.onload) {
+          this.onload();
+        }
+      }
+    };
+
+    global.fetch = jest.fn().mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options.body);
+      const response = body.fileName.includes('ava')
         ? {
             candidateName: 'Ava Chen',
             matchScore: 96,
@@ -60,7 +65,10 @@ describe('BatchResumeUploadPage', () => {
             },
           };
 
-      return Promise.resolve({ data: response });
+      return {
+        ok: true,
+        json: async () => response,
+      };
     });
   });
 
@@ -86,9 +94,9 @@ describe('BatchResumeUploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Start Batch Analysis' }));
 
     await waitFor(() => {
-      expect(extractResumeTextFromFile).toHaveBeenCalledTimes(2);
-      expect(axios.post).toHaveBeenCalledWith('/api/batch/analyze', expect.objectContaining({ candidateIndex: 1 }), expect.any(Object));
-      expect(axios.post).toHaveBeenCalledWith('/api/batch/analyze', expect.objectContaining({ candidateIndex: 2 }), expect.any(Object));
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ fileName: 'ava-chen.pdf', jobTitle: 'Senior Frontend Engineer' });
+      expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({ fileName: 'noah-patel.docx', jobTitle: 'Senior Frontend Engineer' });
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);
@@ -110,7 +118,7 @@ describe('BatchResumeUploadPage', () => {
     await user.type(screen.getByLabelText('Full Job Description'), 'Too short');
     await user.click(screen.getByRole('button', { name: 'Save & Continue' }));
 
-    expect(axios.post).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
     expect(screen.getByText('Please enter at least 100 meaningful characters for the job description.')).toBeInTheDocument();
   });
 });

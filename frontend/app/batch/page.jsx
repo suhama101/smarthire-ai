@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDownAZ,
@@ -19,17 +18,30 @@ import {
 } from 'lucide-react';
 import { readStoredAuth } from '../../src/lib/auth-session';
 import { addBatchRun, buildBatchName, buildBatchResultsCsv, buildReportFilename } from '../../src/lib/batch-history';
-import { extractResumeTextFromFile } from '../../src/lib/resume-text';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../src/lib/input-utils';
 
 const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt,.md';
-const MAX_FILES = 50;
+const MAX_FILES = 20;
 const PROCESS_DELAY_MS = 250;
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const commaIndex = result.indexOf(',');
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+
+    reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
 function formatFileSize(bytes) {
   const size = Number(bytes) || 0;
 
@@ -136,20 +148,6 @@ function statusTone(status) {
   }
 
   return 'border-slate-200 bg-slate-50 text-slate-700';
-}
-
-function experienceTone(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-
-  if (normalized === 'strong') {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  }
-
-  if (normalized === 'weak') {
-    return 'bg-rose-50 text-rose-700 border-rose-200';
-  }
-
-  return 'bg-amber-50 text-amber-700 border-amber-200';
 }
 
 function recommendationTone(value) {
@@ -463,29 +461,35 @@ export default function BatchResumeUploadPage() {
       setProgress({ current: index + 1, total: workingFiles.length, label: `Processing ${index + 1} of ${workingFiles.length} resumes...` });
 
       try {
-        const resumeText = await extractResumeTextFromFile(fileEntry.file);
+        const fileBase64 = await readFileAsBase64(fileEntry.file);
 
-        if (!resumeText || resumeText.trim().length < 20) {
-          throw new Error('Could not extract readable text from this resume.');
-        }
-
-        const response = await axios.post(
-          '/api/batch/analyze',
-          {
+        const response = await fetch('/api/batch/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: fileEntry.file.name,
+            mimeType: fileEntry.file.type,
             jobTitle: sanitizeText(savedJob.jobTitle),
             companyName: sanitizeText(savedJob.companyName),
             jobDescription: sanitizeText(savedJob.jobDescription),
-            resumeText,
             candidateIndex: index + 1,
-          },
-          { timeout: 120000 }
-        );
+          }),
+        });
 
-        const normalized = normalizeBatchResult(response.data, fileEntry.name);
+        const responseData = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(responseData?.error || 'Resume analysis failed.');
+        }
+
+        const normalized = normalizeBatchResult(responseData, fileEntry.name);
         const completedResult = { ...normalized, sourceFileName: fileEntry.name, rank: index + 1 };
         results.push(completedResult);
 
-        setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Done', error: '', result: completedResult, resumeText } : item)));
+        setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Done', error: '', result: completedResult } : item)));
       } catch (itemError) {
         const message = getFriendlyApiError(itemError, 'Resume analysis failed.');
         setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Failed', error: message } : item)));
@@ -721,7 +725,7 @@ export default function BatchResumeUploadPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B8B9E]">Step 2</p>
                   <h2 className="mt-1 text-xl font-semibold text-[#F1F1F3]">Resume upload</h2>
                 </div>
-                <p className="text-sm text-[#8B8B9E]">Upload up to 50 resumes at once</p>
+                  <p className="text-sm text-[#8B8B9E]">Upload up to 20 resumes at once</p>
               </div>
 
               <div
@@ -877,7 +881,6 @@ export default function BatchResumeUploadPage() {
                             ['Match Score', 'matchScore'],
                             ['Matched Skills', 'matchedSkills'],
                             ['Missing Skills', 'missingSkills'],
-                            ['Experience Fit', 'experienceFit'],
                             ['Recommendation', 'recommendation'],
                           ].map(([label, key]) => (
                             <th key={key} className="px-4 py-3 font-semibold">

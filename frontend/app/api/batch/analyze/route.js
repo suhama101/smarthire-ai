@@ -141,31 +141,51 @@ function buildFallbackMatch(candidateProfile, jobTitle, jobDescription, candidat
   );
 }
 
-async function callClaude(jobTitle, companyName, jobDescription, resumeText, candidateIndex) {
-  const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
+async function extractResumeFromBase64(fileBase64, fileName, mimeType) {
+  const buffer = Buffer.from(String(fileBase64 || ''), 'base64');
+  const extension = String(fileName || '').toLowerCase().split('.').pop();
+  const normalizedMime = String(mimeType || '').toLowerCase();
 
-  if (!apiKey) {
-    return buildFallbackMatch({ summary: resumeText }, jobTitle, jobDescription, candidateIndex);
+  if (normalizedMime === 'application/pdf' || extension === 'pdf') {
+    return { buffer, text: '' };
   }
 
-  const prompt = `You are a recruiter assistant. Extract the candidate profile from the resume text, then match it against the job description and return a single JSON object with this exact structure:
+  if (normalizedMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || extension === 'docx') {
+    try {
+      const mammothModule = await import('mammoth');
+      const mammoth = mammothModule.default || mammothModule;
+      const result = await mammoth.extractRawText({ buffer });
+      return { buffer, text: String(result?.value || '').replace(/\s+/g, ' ').trim() };
+    } catch {
+      return { buffer, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
+    }
+  }
+
+  return { buffer, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
+}
+
+function buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex) {
+  return `You are an expert recruiter. Read this resume and compare it against this job: "${String(jobTitle || '').trim()}".
+Job Description: "${String(jobDescription || '').trim()}"
+
+Return ONLY a JSON object with:
 {
-  "candidateName": string,
-  "matchScore": number,
-  "matchedSkills": string[],
-  "missingSkills": string[],
-  "experienceFit": "Strong" | "Moderate" | "Weak",
-  "recommendation": string,
+  "candidateName": "string",
+  "matchScore": number (0-100),
+  "matchedSkills": ["skill1", "skill2"],
+  "missingSkills": ["skill1", "skill2"],
+  "recommendation": "Highly Recommended|Consider|Not Recommended",
+  "experienceFit": "string (1 sentence)",
   "profile": {
-    "name": string,
-    "email": string,
-    "title": string,
-    "summary": string,
-    "skills": string[],
-    "matchedSkills": string[],
-    "missingSkills": string[],
-    "experience": [{"title": string, "company": string, "duration": string, "description": string}],
-    "education": [{"degree": string, "institution": string, "year": string}],
+    "name": "string",
+    "email": "string",
+    "title": "string",
+    "summary": "string",
+    "skills": ["skill1", "skill2"],
+    "matchedSkills": ["skill1", "skill2"],
+    "missingSkills": ["skill1", "skill2"],
+    "experience": [{"title": "string", "company": "string", "duration": "string", "description": "string"}],
+    "education": [{"degree": "string", "institution": "string", "year": "string"}],
     "yearsExperience": number
   }
 }
@@ -176,14 +196,47 @@ Rules:
 - Keep matchedSkills and missingSkills concise and deduplicated.
 - Use the profile object to preserve candidate details.
 - Company: ${String(companyName || '').trim() || 'Unknown Company'}
-- Job title: ${String(jobTitle || '').trim() || 'Unknown Role'}
 - Candidate index: ${Number(candidateIndex || 1)}
+- Return ONLY valid JSON. No markdown. No explanation.`;
+}
 
-Resume text:
-${String(resumeText || '').trim()}
+async function callClaude(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex) {
+  const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
-Job description:
-${String(jobDescription || '').trim()}`;
+  const resume = await extractResumeFromBase64(fileBase64, fileName, mimeType);
+
+  if (!apiKey) {
+    if (resume.text) {
+      return buildFallbackMatch({ summary: resume.text }, jobTitle, jobDescription, candidateIndex);
+    }
+
+    const error = new Error('ANTHROPIC_API_KEY not set');
+    error.status = 500;
+    throw error;
+  }
+
+  const isPdf = String(mimeType || '').toLowerCase() === 'application/pdf' || String(fileName || '').toLowerCase().endsWith('.pdf');
+  const content = isPdf
+    ? [
+        {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: String(fileBase64 || ''),
+          },
+        },
+        {
+          type: 'text',
+          text: buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex),
+        },
+      ]
+    : [
+        {
+          type: 'text',
+          text: `${buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex)}\n\nResume text:\n${String(resume.text || '').trim()}`,
+        },
+      ];
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -199,7 +252,7 @@ ${String(jobDescription || '').trim()}`;
       messages: [
         {
           role: 'user',
-          content: prompt,
+          content,
         },
       ],
     }),
@@ -233,17 +286,19 @@ export async function POST(request) {
     }
 
     const body = await request.json();
+    const fileBase64 = String(body?.fileBase64 || '').trim();
+    const fileName = String(body?.fileName || '').trim();
+    const mimeType = String(body?.mimeType || '').trim();
     const jobTitle = sanitizeText(body?.jobTitle);
     const jobDescription = sanitizeText(body?.jobDescription);
-    const resumeText = sanitizeText(body?.resumeText);
     const candidateIndex = Number(body?.candidateIndex || 1);
     const companyName = sanitizeText(body?.companyName || 'Recruiter Batch');
 
-    if (!jobTitle || !jobDescription || !resumeText) {
-      return NextResponse.json({ error: 'jobTitle, jobDescription, and resumeText are required.' }, { status: 400 });
+    if (!jobTitle || !jobDescription || !fileBase64 || !fileName) {
+      return NextResponse.json({ error: 'fileBase64, fileName, jobTitle, and jobDescription are required.' }, { status: 400 });
     }
 
-    const result = await callClaude(jobTitle, companyName, jobDescription, resumeText, candidateIndex);
+    const result = await callClaude(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex);
 
     return NextResponse.json(
       {
