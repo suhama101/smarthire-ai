@@ -35,6 +35,7 @@ async function proxyRequest(request, pathSegments) {
   const headers = new Headers(request.headers);
   headers.delete('host');
   headers.delete('content-length');
+  headers.delete('origin');
 
   const init = {
     method: request.method,

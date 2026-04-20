@@ -4,7 +4,7 @@ const originalNodeEnv = process.env.NODE_ENV;
 const originalCorsOrigins = process.env.CORS_ORIGINS;
 
 process.env.NODE_ENV = 'production';
-process.env.CORS_ORIGINS = 'https://your-app.vercel.app,https://custom-domain.com';
+process.env.CORS_ORIGINS = 'https://custom-domain.com';
 
 const app = require('../server');
 
@@ -17,10 +17,20 @@ describe('CORS configuration', () => {
   test('allows explicitly allowlisted origins', async () => {
     const response = await request(app)
       .get('/api/health')
-      .set('Origin', 'https://your-app.vercel.app');
+      .set('Origin', 'https://custom-domain.com');
 
     expect(response.status).toBe(200);
-    expect(response.headers['access-control-allow-origin']).toBe('https://your-app.vercel.app');
+    expect(response.headers['access-control-allow-origin']).toBe('https://custom-domain.com');
+    expect(response.body).toMatchObject({ status: 'ok' });
+  });
+
+  test('allows the SmartHire production origins by default', async () => {
+    const response = await request(app)
+      .get('/api/health')
+      .set('Origin', 'https://smarthire-ai-lrq8.vercel.app');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe('https://smarthire-ai-lrq8.vercel.app');
     expect(response.body).toMatchObject({ status: 'ok' });
   });
 

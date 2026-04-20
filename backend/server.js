@@ -20,6 +20,10 @@ const PORT = Number(process.env.PORT) || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const DEVELOPMENT_ORIGINS = new Set(['http://localhost:3000', 'http://localhost:3001']);
+const DEFAULT_PRODUCTION_ORIGINS = new Set([
+	'https://smarthire-ai-lrq8.vercel.app',
+	'https://smarthire-ai-vert.vercel.app',
+]);
 
 function normalizeOrigin(origin) {
 	return String(origin || '').trim().replace(/\/$/, '');
@@ -36,15 +40,21 @@ function isLocalDevelopmentOrigin(origin) {
 
 function getAllowedOrigins() {
 	const rawOrigins = String(process.env.CORS_ORIGINS || '').trim();
+	const configuredOrigins = rawOrigins
+		? rawOrigins
+			.split(',')
+			.map((origin) => normalizeOrigin(origin))
+			.filter(Boolean)
+		: [];
 
-	if (!rawOrigins) {
-		return NODE_ENV === 'production' ? [] : Array.from(DEVELOPMENT_ORIGINS);
+	if (NODE_ENV === 'production') {
+		return Array.from(new Set([
+			...configuredOrigins,
+			...DEFAULT_PRODUCTION_ORIGINS,
+		]));
 	}
 
-	return rawOrigins
-		.split(',')
-		.map((origin) => normalizeOrigin(origin))
-		.filter(Boolean);
+	return configuredOrigins.length > 0 ? configuredOrigins : Array.from(DEVELOPMENT_ORIGINS);
 }
 
 const app = express();
