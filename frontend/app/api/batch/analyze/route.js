@@ -12,6 +12,12 @@ export const maxDuration = 30;
 
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const JOB_SKILL_KEYWORDS = [
+  'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
+  'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
+  'tailwind', 'redux', 'graphql', 'testing', 'jest', 'cypress', 'playwright', 'git', 'devops', 'accessibility',
+  'api', 'frontend', 'backend', 'cloud', 'security', 'architecture', 'product', 'leadership', 'communication',
+];
 
 function parseJsonResponse(text) {
   const cleanText = String(text || '').replace(/```json|```/gi, '').trim();
@@ -74,13 +80,72 @@ function normalizeBatchResult(raw, fallbackContext) {
   };
 }
 
+function dedupeStrings(values) {
+  return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function normalizeKeywordLabel(value) {
+  const text = String(value || '');
+
+  if (/next\.js|nextjs/i.test(text)) return 'Next.js';
+  if (/node\.js/i.test(text)) return 'Node.js';
+  if (/gcp/i.test(text)) return 'GCP';
+  if (/aws/i.test(text)) return 'AWS';
+  if (/azure/i.test(text)) return 'Azure';
+  if (/ci\/cd/i.test(text)) return 'CI/CD';
+  if (/sql/i.test(text)) return 'SQL';
+  if (/api/i.test(text)) return 'APIs';
+  if (/ui/i.test(text)) return 'UI';
+  if (/ux/i.test(text)) return 'UX';
+
+  return text;
+}
+
+function extractSkills(text) {
+  const normalized = String(text || '').toLowerCase();
+  return dedupeStrings(JOB_SKILL_KEYWORDS.filter((skill) => normalized.includes(skill)).map(normalizeKeywordLabel));
+}
+
+function buildFallbackMatch(candidateProfile, jobTitle, jobDescription, candidateIndex) {
+  const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
+  const candidateSkills = extractSkills(`${JSON.stringify(profile)} ${String(profile.summary || '')}`);
+  const jobSkills = extractSkills(`${jobTitle} ${jobDescription}`);
+  const matchedSkills = candidateSkills.filter((skill) => jobSkills.some((jobSkill) => skill.toLowerCase() === jobSkill.toLowerCase() || skill.toLowerCase().includes(jobSkill.toLowerCase()) || jobSkill.toLowerCase().includes(skill.toLowerCase())));
+  const missingSkills = jobSkills.filter((skill) => !matchedSkills.some((matched) => matched.toLowerCase() === skill.toLowerCase()));
+  const overlapRatio = matchedSkills.length / Math.max(jobSkills.length || 1, 1);
+  const matchScore = Math.max(25, Math.min(95, Math.round(overlapRatio * 100)));
+  const recommendation = matchScore >= 80 ? 'Highly Recommended' : matchScore >= 60 ? 'Consider with Reservations' : 'Not Recommended';
+
+  return normalizeBatchResult(
+    {
+      candidateName: profile.name || profile.fullName || profile.candidateName || `Candidate ${candidateIndex || 1}`,
+      matchScore,
+      matchedSkills,
+      missingSkills,
+      experienceFit: matchScore >= 80 ? 'Strong' : matchScore >= 60 ? 'Moderate' : 'Weak',
+      recommendation,
+      profile: {
+        name: profile.name || profile.fullName || profile.candidateName || `Candidate ${candidateIndex || 1}`,
+        email: profile.email || '',
+        title: profile.title || jobTitle || '',
+        summary: profile.summary || '',
+        skills: candidateSkills,
+        matchedSkills,
+        missingSkills,
+        experience: Array.isArray(profile.experience) ? profile.experience : [],
+        education: Array.isArray(profile.education) ? profile.education : [],
+        yearsExperience: Number.isFinite(Number(profile.yearsExperience)) ? Number(profile.yearsExperience) : null,
+      },
+    },
+    { candidateIndex, profile }
+  );
+}
+
 async function callClaude(jobTitle, companyName, jobDescription, resumeText, candidateIndex) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
   if (!apiKey) {
-    const error = new Error('ANTHROPIC_API_KEY is not configured.');
-    error.status = 503;
-    throw error;
+    return buildFallbackMatch({ summary: resumeText }, jobTitle, jobDescription, candidateIndex);
   }
 
   const prompt = `You are a recruiter assistant. Extract the candidate profile from the resume text, then match it against the job description and return a single JSON object with this exact structure:
@@ -197,11 +262,11 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: isAuthIssue
-          ? message
-          : isTemporary
+        error: isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
-            : 'Batch analysis failed. Please try again.',
+            : isAuthIssue
+              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              : 'Batch analysis failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }
     );

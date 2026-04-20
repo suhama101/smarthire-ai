@@ -12,6 +12,12 @@ export const maxDuration = 60;
 
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const JOB_SKILL_KEYWORDS = [
+  'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
+  'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
+  'tailwind', 'redux', 'graphql', 'testing', 'jest', 'cypress', 'playwright', 'git', 'devops', 'accessibility',
+  'api', 'frontend', 'backend', 'cloud', 'security', 'architecture', 'product', 'leadership', 'communication',
+];
 
 function normalizeArray(values) {
   if (!Array.isArray(values)) {
@@ -63,13 +69,55 @@ function normalizeMatchData(raw) {
   };
 }
 
+function dedupeStrings(values) {
+  return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function extractSkills(text) {
+  const normalized = String(text || '').toLowerCase();
+
+  return dedupeStrings(
+    JOB_SKILL_KEYWORDS.filter((skill) => normalized.includes(skill)).map((skill) => {
+      if (/next\.js|nextjs/i.test(skill)) return 'Next.js';
+      if (/node\.js/i.test(skill)) return 'Node.js';
+      if (/gcp/i.test(skill)) return 'GCP';
+      if (/aws/i.test(skill)) return 'AWS';
+      if (/azure/i.test(skill)) return 'Azure';
+      if (/ci\/cd/i.test(skill)) return 'CI/CD';
+      if (/sql/i.test(skill)) return 'SQL';
+      if (/api/i.test(skill)) return 'APIs';
+      if (/ui/i.test(skill)) return 'UI';
+      if (/ux/i.test(skill)) return 'UX';
+      return skill;
+    })
+  );
+}
+
+function buildFallbackMatch(candidateProfile, jobTitle, jobDescription) {
+  const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
+  const candidateSkills = extractSkills(`${JSON.stringify(profile)} ${String(profile.summary || '')}`);
+  const jobSkills = extractSkills(`${jobTitle} ${jobDescription}`);
+  const matchedSkills = candidateSkills.filter((skill) => jobSkills.some((jobSkill) => skill.toLowerCase() === jobSkill.toLowerCase() || skill.toLowerCase().includes(jobSkill.toLowerCase()) || jobSkill.toLowerCase().includes(skill.toLowerCase())));
+  const missingSkills = jobSkills.filter((skill) => !matchedSkills.some((matched) => matched.toLowerCase() === skill.toLowerCase()));
+  const overlapRatio = matchedSkills.length / Math.max(jobSkills.length || 1, 1);
+  const matchScore = Math.max(25, Math.min(95, Math.round(overlapRatio * 100)));
+
+  return normalizeMatchData({
+    matchScore,
+    matchedSkills,
+    missingSkills,
+    niceToHaveSkills: missingSkills.slice(0, 3),
+    experienceFit: matchScore >= 80 ? 'Strong' : matchScore >= 60 ? 'Moderate' : 'Weak',
+    recommendation: matchScore >= 80 ? 'Highly Recommended' : matchScore >= 60 ? 'Consider with Reservations' : 'Not Recommended',
+    recommendationReason: 'Fallback analysis used because ANTHROPIC_API_KEY is not configured.',
+  });
+}
+
 async function analyzeMatch(candidateProfile, jobTitle, jobDescription) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
   if (!apiKey) {
-    const error = new Error('ANTHROPIC_API_KEY is not configured.');
-    error.status = 503;
-    throw error;
+    return buildFallbackMatch(candidateProfile, jobTitle, jobDescription);
   }
 
   const prompt = `You are an expert recruiter. Compare this candidate profile against the job description and return a JSON object with:
@@ -163,11 +211,11 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: isAuthIssue
-          ? message
-          : isTemporary
+        error: isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
-            : 'Job matching failed. Please try again.',
+            : isAuthIssue
+              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              : 'Job matching failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }
     );

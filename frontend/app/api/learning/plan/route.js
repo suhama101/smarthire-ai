@@ -13,6 +13,10 @@ export const maxDuration = 60;
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
+function dedupeStrings(values) {
+  return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
 function parseJsonResponse(text) {
   const cleanText = String(text || '').replace(/```json|```/gi, '').trim();
 
@@ -74,13 +78,37 @@ function normalizeLearningPlan(raw) {
   };
 }
 
+function buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult) {
+  const missingSkills = dedupeStrings(matchResult?.missingSkills || []);
+  const quickWins = missingSkills.slice(0, 3);
+  const totalWeeks = Math.max(2, Math.min(8, Math.ceil((missingSkills.length || 4) / 2)));
+  const score = Number(matchResult?.matchScore || 0);
+  const readinessLabel = score >= 80 ? 'Almost Ready' : score >= 60 ? 'Needs Work' : 'Major Gaps';
+
+  return normalizeLearningPlan({
+    totalWeeks,
+    readinessLabel,
+    skillModules: missingSkills.slice(0, 4).map((skill, index) => ({
+      skillName: skill,
+      priority: index === 0 ? 'High' : 'Medium',
+      whyNeeded: `This role emphasizes ${skill} for ${String(jobTitle || 'the target role').trim()}.`,
+      resources: [],
+      miniProject: `Build a small ${skill} project aligned to the role responsibilities.`,
+    })),
+    weeklySchedule: Array.from({ length: totalWeeks }, (_, index) => ({
+      week: index + 1,
+      focusArea: index < missingSkills.length ? missingSkills[index] : 'Role alignment',
+      goal: index < missingSkills.length ? `Close the gap in ${missingSkills[index]}.` : 'Polish portfolio and interview readiness.',
+    })),
+    quickWins: quickWins.length ? quickWins : ['Review role requirements', 'Refresh resume summary', 'Prepare project examples'],
+  });
+}
+
 async function generateLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
   if (!apiKey) {
-    const error = new Error('ANTHROPIC_API_KEY is not configured.');
-    error.status = 503;
-    throw error;
+    return buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult);
   }
 
   const prompt = `You are a career coach and learning designer. Based on this candidate profile, job description, and match analysis, create a detailed personalized learning plan. Return a JSON object with:
@@ -175,7 +203,9 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: message.includes('ANTHROPIC_API_KEY') ? message : 'Learning plan generation failed. Please try again.',
+        error: message.includes('ANTHROPIC_API_KEY')
+          ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+          : 'Learning plan generation failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }
     );

@@ -16,6 +16,15 @@ const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
+const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
+const SKILL_KEYWORDS = [
+  'javascript', 'typescript', 'react', 'next.js', 'nextjs', 'node.js', 'node', 'express', 'python', 'java',
+  'c#', 'go', 'golang', 'php', 'ruby', 'sql', 'postgresql', 'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp',
+  'docker', 'kubernetes', 'terraform', 'html', 'css', 'tailwind', 'redux', 'graphql', 'rest', 'api', 'testing',
+  'jest', 'cypress', 'playwright', 'git', 'ci/cd', 'devops', 'agile', 'scrum', 'figma', 'ui', 'ux', 'accessibility',
+];
+
 function getFileExtension(fileName = '') {
   const parts = String(fileName).toLowerCase().split('.');
   return parts.length > 1 ? `.${parts.pop()}` : '';
@@ -183,13 +192,55 @@ function parseJsonResponse(text) {
   }
 }
 
+function dedupeStrings(values) {
+  return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function extractFallbackSkills(text) {
+  const normalized = String(text || '').toLowerCase();
+  const labels = SKILL_KEYWORDS.filter((skill) => normalized.includes(skill)).map((skill) => {
+    if (skill === 'nextjs') return 'Next.js';
+    if (skill === 'node.js') return 'Node.js';
+    if (skill === 'ci/cd') return 'CI/CD';
+    if (skill === 'gcp') return 'GCP';
+    if (skill === 'aws') return 'AWS';
+    if (skill === 'azure') return 'Azure';
+    if (skill === 'sql') return 'SQL';
+    if (skill === 'rest') return 'REST';
+    if (skill === 'api') return 'APIs';
+    if (skill === 'ui') return 'UI';
+    if (skill === 'ux') return 'UX';
+    return skill;
+  });
+
+  return dedupeStrings(labels);
+}
+
+function extractFallbackProfile(resumeText) {
+  const text = String(resumeText || '').replace(/\s+/g, ' ').trim();
+  const lines = String(resumeText || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const emails = text.match(EMAIL_REGEX) || [];
+  const phones = text.match(PHONE_REGEX) || [];
+
+  return normalizeResumeData({
+    name: lines[0] || 'Candidate',
+    email: emails[0] || null,
+    phone: phones[0] || null,
+    skills: extractFallbackSkills(text),
+    experience: [],
+    education: [],
+    summary: text.slice(0, 280) || 'Resume text extracted successfully.',
+  });
+}
+
 async function analyzeWithClaude(resumeText) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 
   if (!apiKey) {
-    const error = new Error('ANTHROPIC_API_KEY is not configured.');
-    error.status = 503;
-    throw error;
+    return extractFallbackProfile(resumeText);
   }
 
   const prompt = `Extract structured profile data from this resume text. Return JSON with fields: name, email, phone, skills (array), experience (array of {title, company, duration, description}), education (array of {degree, institution, year}), summary (2-3 sentence overview)
@@ -296,13 +347,13 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: isAuthIssue
-          ? message
-          : isTooLarge
+        error: isTooLarge
             ? 'File too large. Max 4MB.'
           : isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
-            : 'Analysis failed. Please try again.',
+            : isAuthIssue
+              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              : 'Analysis failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }
     );
