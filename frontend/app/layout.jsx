@@ -7,9 +7,29 @@ const manrope = Manrope({
   display: 'swap',
 });
 
+const siteUrl = new URL('https://smarthire-ai-lrq8.vercel.app');
+
 export const metadata = {
-  title: 'SmartHire AI',
-  description: 'Resume analysis and job matching',
+  metadataBase: siteUrl,
+  title: 'SmartHire AI — Enterprise Hiring Intelligence',
+  description: 'AI-powered resume analysis, candidate scoring, and skill gap planning for multinational hiring teams.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
+  openGraph: {
+    title: 'SmartHire AI — Enterprise Hiring Intelligence',
+    description: 'AI-powered resume analysis, candidate scoring, and skill gap planning for multinational hiring teams.',
+    images: ['/og-image.svg'],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SmartHire AI — Enterprise Hiring Intelligence',
+    description: 'AI-powered resume analysis, candidate scoring, and skill gap planning for multinational hiring teams.',
+    images: ['/og-image.svg'],
+  },
 };
 
 export default function RootLayout({ children }) {

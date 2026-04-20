@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#0B0B10"/>
+  <circle cx="220" cy="160" r="140" fill="#4F46E5" fill-opacity="0.18"/>
+  <circle cx="980" cy="470" r="180" fill="#8B5CF6" fill-opacity="0.14"/>
+  <rect x="90" y="90" width="1020" height="450" rx="32" fill="#12121A" stroke="#2A2A38"/>
+  <text x="140" y="205" fill="#F1F1F3" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="700">SmartHire AI</text>
+  <text x="140" y="275" fill="#B7B7C6" font-size="28" font-family="Arial, Helvetica, sans-serif">Enterprise Hiring Intelligence</text>
+  <text x="140" y="345" fill="#8B8B9E" font-size="24" font-family="Arial, Helvetica, sans-serif">AI resume analysis, candidate scoring, skill gap planning, and recruiter batch workflows.</text>
+  <rect x="140" y="410" width="200" height="56" rx="28" fill="#FFFFFF"/>
+  <text x="186" y="447" fill="#0B0B10" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">SmartHire AI</text>
+</svg>

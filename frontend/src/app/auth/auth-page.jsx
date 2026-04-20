@@ -1,50 +1,107 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { persistAuthSession } from '../../lib/auth-session';
 import { getApiUrl } from '../../lib/api';
+import { getFriendlyApiError, sanitizeText } from '../../lib/input-utils';
 
 export default function AuthPage({ mode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isSignup = mode === 'signup';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('SmartHire User');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('candidate');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const redirectTarget = useMemo(() => {
+    if (!isSignup) {
+      const from = searchParams?.get('from') || '';
+      const normalized = from.trim();
+
+      if (normalized.startsWith('/') && !normalized.startsWith('//')) {
+        return normalized;
+      }
+    }
+
+    return '/dashboard';
+  }, [isSignup, searchParams]);
+
+  function clearFieldError(field) {
+    if (!fieldErrors[field]) {
+      return;
+    }
+
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!email.trim() || !password.trim()) {
-      setError('Email and password are required.');
-      return;
+    const nextFieldErrors = {};
+    const trimmedEmail = sanitizeText(email);
+    const trimmedFullName = sanitizeText(fullName);
+    const trimmedPassword = sanitizeText(password);
+    const trimmedConfirmPassword = sanitizeText(confirmPassword);
+
+    if (!trimmedEmail) {
+      nextFieldErrors.email = 'Email is required.';
     }
 
-    if (isSignup && !fullName.trim()) {
-      setError('Full name is required for signup.');
+    if (!trimmedPassword) {
+      nextFieldErrors.password = 'Password is required.';
+    }
+
+    if (isSignup) {
+      if (!trimmedFullName) {
+        nextFieldErrors.fullName = 'Full name is required.';
+      }
+
+      if (!trimmedConfirmPassword) {
+        nextFieldErrors.confirmPassword = 'Please confirm your password.';
+      } else if (trimmedPassword && trimmedPassword !== trimmedConfirmPassword) {
+        nextFieldErrors.confirmPassword = 'Passwords do not match.';
+      }
+    }
+
+    setFieldErrors(nextFieldErrors);
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError('');
       return;
     }
 
     setBusy(true);
     setError('');
+    setFieldErrors({});
 
     try {
       const endpoint = isSignup ? getApiUrl('auth/signup') : getApiUrl('auth/login');
       const payload = isSignup
         ? {
-            email: email.trim(),
-            password,
-            full_name: fullName.trim(),
+            email: trimmedEmail,
+            password: trimmedPassword,
+            full_name: trimmedFullName,
             role,
           }
         : {
-            email: email.trim(),
-            password,
+            email: trimmedEmail,
+            password: trimmedPassword,
           };
 
       const response = await axios.post(endpoint, payload);
@@ -56,10 +113,9 @@ export default function AuthPage({ mode }) {
       }
 
       persistAuthSession({ token, user });
-      router.push('/');
+      router.push(redirectTarget);
     } catch (authError) {
-      const message = authError?.response?.data?.error || authError?.message || 'Authentication failed.';
-      setError(message);
+      setError(getFriendlyApiError(authError, 'Authentication failed.'));
     } finally {
       setBusy(false);
     }
@@ -81,41 +137,94 @@ export default function AuthPage({ mode }) {
             </p>
           </div>
 
-          <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+          <form className="mt-8 space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-4">
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email"
-                className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
-              />
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password"
-                className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
-              />
+              <div className="space-y-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    clearFieldError('email');
+                  }}
+                  placeholder="you@company.com"
+                  className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
+                />
+                {fieldErrors.email ? <p className="text-sm text-rose-300">{fieldErrors.email}</p> : null}
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    clearFieldError('password');
+                  }}
+                  placeholder="Password"
+                  className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
+                />
+                {fieldErrors.password ? <p className="text-sm text-rose-300">{fieldErrors.password}</p> : null}
+              </div>
             </div>
 
             {isSignup ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  placeholder="Full name"
-                  className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
-                />
-                <select
-                  value={role}
-                  onChange={(event) => setRole(event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="candidate">Candidate</option>
-                  <option value="recruiter">Recruiter</option>
-                </select>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(event) => {
+                      setFullName(event.target.value);
+                      clearFieldError('fullName');
+                    }}
+                    placeholder="Full Name"
+                    className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                  {fieldErrors.fullName ? <p className="text-sm text-rose-300">{fieldErrors.fullName}</p> : null}
+                </div>
+
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      clearFieldError('confirmPassword');
+                    }}
+                    placeholder="Confirm Password"
+                    className="w-full rounded-2xl border border-white/10 bg-[#0F0F13] px-4 py-3 text-sm text-[#F1F1F3] outline-none transition placeholder:text-[#66667A] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                  {fieldErrors.confirmPassword ? <p className="text-sm text-rose-300">{fieldErrors.confirmPassword}</p> : null}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#8B8B9E]">Role</p>
+                  <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-[#0F0F13] p-2">
+                    <button
+                      type="button"
+                      onClick={() => setRole('candidate')}
+                      className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+                        role === 'candidate'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-[#8B8B9E] hover:bg-white/5 hover:text-[#F1F1F3]'
+                      }`}
+                    >
+                      Candidate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole('recruiter')}
+                      className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+                        role === 'recruiter'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-[#8B8B9E] hover:bg-white/5 hover:text-[#F1F1F3]'
+                      }`}
+                    >
+                      Recruiter
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : null}
 

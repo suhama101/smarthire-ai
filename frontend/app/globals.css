@@ -10,6 +10,7 @@ body {
   color: #f1f1f3;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 * {
@@ -27,6 +28,36 @@ textarea,
 select,
 a {
   transition: all 200ms ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.9);
+  outline-offset: 2px;
+}
+
+.smarthire-full-width-buttons button,
+.smarthire-full-width-buttons a[href] {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .smarthire-full-width-buttons button:not([aria-label]),
+  .smarthire-full-width-buttons a[href] {
+    width: 100%;
+  }
+
+  .smarthire-full-width-buttons .flex-wrap {
+    gap: 0.75rem;
+  }
+}
+
+.smarthire-mobile-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .smarthire-dark .bg-white,

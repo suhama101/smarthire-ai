@@ -1,28 +1,28 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import axios from 'axios';
+import { render, screen } from '@testing-library/react';
 import HomePage from '../app/page';
-
-jest.mock('axios');
 
 describe('HomePage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    axios.get.mockResolvedValue({
-      data: { timestamp: '2026-04-06T12:00:00.000Z' },
-    });
+    window.localStorage.clear();
   });
 
-  test('renders the dashboard shell and health status', async () => {
+  test('renders the marketing landing page', () => {
     render(<HomePage />);
 
-    expect(screen.getByText('AI-Powered Hiring Intelligence')).toBeInTheDocument();
-    expect(screen.queryByText('Authentication')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Login' })).toHaveAttribute('href', '/login');
-    expect(screen.getByRole('link', { name: 'Signup' })).toHaveAttribute('href', '/signup');
+    expect(screen.getByText('Enterprise hiring intelligence for screening, matching, and batch review.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open dashboard' })).toHaveAttribute('href', '/dashboard');
+    expect(screen.getByRole('link', { name: 'Review history' })).toHaveAttribute('href', '/history');
+    expect(screen.getByText('AI-assisted screening')).toBeInTheDocument();
+    expect(screen.getByText('Session-based history')).toBeInTheDocument();
+    expect(screen.getByText('A cleaner front door for enterprise stakeholders.')).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith('/api/health');
-      expect(screen.getByText(/API healthy at/i)).toBeInTheDocument();
-    });
+  test('shows a logged-in welcome banner when auth exists', () => {
+    window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123', user: { name: 'Amina Khan', email: 'amina@example.com' } }));
+
+    render(<HomePage />);
+
+    expect(screen.getByText('Welcome back, Amina Khan.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Go to dashboard/i })).toHaveAttribute('href', '/dashboard');
   });
 });

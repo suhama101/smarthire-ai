@@ -1,66 +1,84 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import axios from 'axios';
+import { render, screen } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
 import DashboardPage from '../src/app/dashboard/page';
 
-jest.mock('axios');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
 describe('DashboardPage', () => {
   const replaceMock = jest.fn();
+  const today = new Date().toISOString();
+  const yesterday = new Date(Date.now() - 86400000).toISOString();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
     window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123' }));
+    window.localStorage.setItem(
+      'smarthire.batch.runs',
+      JSON.stringify([
+        {
+          id: 'batch-2',
+          batchName: 'Acme Global • Senior Full Stack Engineer',
+          jobTitle: 'Senior Full Stack Engineer',
+          companyName: 'Acme Global',
+          createdAt: today,
+          totalResumes: 4,
+          averageScore: 84,
+          topCandidate: 'Amina Khan',
+          results: [
+            { rank: 1, candidateName: 'Amina Khan', matchScore: 96, missingSkills: ['Docker'] },
+            { rank: 2, candidateName: 'Daniel Kim', matchScore: 92, missingSkills: ['Docker'] },
+            { rank: 3, candidateName: 'Sara Lopez', matchScore: 84, missingSkills: ['Kubernetes'] },
+            { rank: 4, candidateName: 'Omar Ali', matchScore: 80, missingSkills: ['Docker'] },
+          ],
+        },
+        {
+          id: 'batch-1',
+          batchName: 'Nova Labs • Backend Engineer',
+          jobTitle: 'Backend Engineer',
+          companyName: 'Nova Labs',
+          createdAt: yesterday,
+          totalResumes: 4,
+          averageScore: 76,
+          topCandidate: 'Maya Roy',
+          results: [
+            { rank: 1, candidateName: 'Maya Roy', matchScore: 88, missingSkills: ['Docker'] },
+            { rank: 2, candidateName: 'Noah Patel', matchScore: 84, missingSkills: ['Docker'] },
+            { rank: 3, candidateName: 'Emily Stone', matchScore: 80, missingSkills: ['Kubernetes'] },
+            { rank: 4, candidateName: 'Hassan Noor', matchScore: 68, missingSkills: ['Docker'] },
+          ],
+        },
+      ])
+    );
     useRouter.mockReturnValue({ replace: replaceMock });
-    axios.get.mockResolvedValue({
-      data: {
-        total_resumes_analyzed: 120,
-        average_match_score: 78.4,
-        total_job_matches: 54,
-        total_skill_gaps_identified: 18,
-        trend: [
-          { label: 'Jan', score: 62 },
-          { label: 'Feb', score: 71 },
-        ],
-        distribution: [
-          { label: 'React', count: 14 },
-          { label: 'Node.js', count: 10 },
-        ],
-        top_skills_matched: [
-          { name: 'React', value: 22 },
-          { name: 'Next.js', value: 17 },
-        ],
-      },
-    });
   });
 
-  afterEach(() => {
-    window.localStorage.removeItem('smarthire.auth');
-  });
-
-  test('fetches dashboard stats and renders summary cards', async () => {
+  test('renders recruiter dashboard metrics and recent batch runs', () => {
     render(<DashboardPage />);
 
-    expect(screen.getByText(/Loading your hiring insights/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith('/api/history/stats');
-    });
-
-    expect(screen.getByText('Total resumes analyzed')).toBeInTheDocument();
-    expect(screen.getByText('120')).toBeInTheDocument();
-    expect(screen.getByText('Average match score')).toBeInTheDocument();
-    expect(screen.getByText('78.4')).toBeInTheDocument();
-    expect(screen.getByText('Total job matches')).toBeInTheDocument();
-    expect(screen.getByText('54')).toBeInTheDocument();
-    expect(screen.getByText('Total skill gaps identified')).toBeInTheDocument();
-    expect(screen.getByText('18')).toBeInTheDocument();
-    expect(screen.getByText(/Match score trend over time/i)).toBeInTheDocument();
-    expect(screen.getByText(/Skill gaps distribution/i)).toBeInTheDocument();
-    expect(screen.getByText(/Top skills matched/i)).toBeInTheDocument();
+    expect(screen.getByText('Total Resumes Processed')).toBeInTheDocument();
+    expect(screen.getByText('8')).toBeInTheDocument();
+    expect(screen.getByText('Average Match Score')).toBeInTheDocument();
+    expect(screen.getByText('84%')).toBeInTheDocument();
+    expect(screen.getByText('Top Skill Gap Across All Candidates')).toBeInTheDocument();
+    expect(screen.getByText('Resumes Processed Today')).toBeInTheDocument();
+    expect(screen.getAllByText('4').length).toBeGreaterThan(0);
+    expect(screen.getByText('Acme Global • Senior Full Stack Engineer')).toBeInTheDocument();
+    expect(screen.getByText('Nova Labs • Backend Engineer')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New Batch Upload' })).toHaveAttribute('href', '/batch');
+    expect(screen.getByRole('link', { name: 'View Full History' })).toHaveAttribute('href', '/history');
+    expect(screen.getByRole('button', { name: 'Download Last Report' })).toBeEnabled();
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  test('shows the empty state when no batch runs exist', () => {
+    window.localStorage.setItem('smarthire.batch.runs', JSON.stringify([]));
+
+    render(<DashboardPage />);
+
+    expect(screen.getByText('No batches run yet. Go to Batch Upload to get started.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start your first batch' })).toHaveAttribute('href', '/batch');
   });
 });
