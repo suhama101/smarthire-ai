@@ -16,6 +16,7 @@ jest.mock('../services/claudeService', () => ({
   matchJobDescription: jest.fn(),
   generateLearningPlan: jest.fn(),
   isAnthropicConfigured: jest.fn(() => false),
+  isMeaningfulJobDescription: jest.fn(() => true),
 }));
 
 jest.mock('../services/resumeParser', () => {
