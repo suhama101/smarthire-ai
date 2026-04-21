@@ -286,11 +286,10 @@ function extractFallbackProfile(resumeText) {
 async function analyzeWithClaude(upload, resumeText) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
   const localResumeText = String(resumeText || '').trim();
-  const fallbackSource = localResumeText || String(upload?.filename || '').trim();
 
   if (!apiKey) {
-    if (fallbackSource) {
-      return extractFallbackProfile(fallbackSource);
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
     }
 
     const error = new Error('ANTHROPIC_API_KEY not set');
@@ -327,8 +326,8 @@ async function analyzeWithClaude(upload, resumeText) {
       statusText: response.statusText,
       errorText,
     });
-    if (fallbackSource) {
-      return extractFallbackProfile(fallbackSource);
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
     }
 
     throw new Error(`Claude request failed with status ${response.status}: ${errorText}`);
@@ -343,8 +342,8 @@ async function analyzeWithClaude(upload, resumeText) {
     .trim();
 
   if (!text) {
-    if (fallbackSource) {
-      return extractFallbackProfile(fallbackSource);
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
     }
 
     throw new Error('Claude returned an empty response.');
@@ -358,8 +357,8 @@ async function analyzeWithClaude(upload, resumeText) {
       stack: parseError?.stack,
     });
 
-    if (fallbackSource) {
-      return extractFallbackProfile(fallbackSource);
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
     }
 
     throw parseError;
