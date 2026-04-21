@@ -88,28 +88,32 @@ export async function extractPdfTextFromFile(file) {
 export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — please check your connection') {
   const responseMessage = String(error?.response?.data?.error || error?.message || '').trim();
 
-  if (/anthropic_api_key|api key/i.test(responseMessage)) {
-    return 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.';
-  }
+  if (responseMessage) {
+    if (/anthropic_api_key|api key/i.test(responseMessage)) {
+      return 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.';
+    }
 
-  if (/too large/i.test(responseMessage)) {
-    return 'File too large. Max 4MB.';
-  }
+    if (/too large/i.test(responseMessage)) {
+      return 'File too large. Max 4MB.';
+    }
 
-  if (/unsupported file/i.test(responseMessage)) {
-    return 'Unsupported file format';
-  }
+    if (/unsupported file/i.test(responseMessage)) {
+      return 'Unsupported file format';
+    }
 
-  if (/too many requests/i.test(responseMessage)) {
-    return 'Too many requests. Please wait a moment.';
-  }
+    if (/too many requests/i.test(responseMessage)) {
+      return 'Too many requests. Please wait a moment.';
+    }
 
-  if (/temporarily unavailable/i.test(responseMessage)) {
-    return 'AI analysis temporarily unavailable. Please try again in a moment.';
-  }
+    if (/temporarily unavailable/i.test(responseMessage)) {
+      return 'AI analysis temporarily unavailable. Please try again in a moment.';
+    }
 
-  if (/network|failed to fetch|timeout|connection/i.test(responseMessage)) {
-    return fallbackMessage;
+    if (/network|failed to fetch|timeout|connection/i.test(responseMessage)) {
+      return fallbackMessage;
+    }
+
+    return responseMessage;
   }
 
   return fallbackMessage;

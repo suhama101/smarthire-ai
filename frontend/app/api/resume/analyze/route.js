@@ -314,7 +314,6 @@ async function analyzeWithClaude(upload, resumeText) {
       'content-type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'tools-2024-04-04',
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
@@ -454,7 +453,7 @@ export async function POST(request) {
             ? 'This PDF could not be analyzed. Please upload a text-based PDF or DOCX file.'
             : isAuthIssue
               ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
-              : 'Analysis failed. Please try again.',
+              : message,
       },
       { status: status >= 400 ? status : 500 }
     );
