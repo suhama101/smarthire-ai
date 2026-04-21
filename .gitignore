@@ -21,6 +21,10 @@ dist/
 build/
 coverage/
 
+# Runtime uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
 # OS / editor files
 .DS_Store
 Thumbs.db
