@@ -30,6 +30,34 @@ function getFileExtension(fileName = '') {
   return parts.length > 1 ? `.${parts.pop()}` : '';
 }
 
+async function extractPdfText(buffer) {
+  try {
+    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjs = pdfjsModule.default || pdfjsModule;
+    const document = await pdfjs.getDocument({ data: buffer, useWorkerFetch: false, isEvalSupported: false }).promise;
+    const pageTexts = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (pageText) {
+        pageTexts.push(pageText);
+      }
+    }
+
+    await document.destroy();
+    return pageTexts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return Buffer.from(buffer).toString('utf8').replace(/\s+/g, ' ').trim();
+  }
+}
+
 async function extractDocxText(buffer) {
   try {
     const mammothModule = await import('mammoth');
@@ -45,6 +73,10 @@ async function extractTextFromUpload(upload) {
   const extension = getFileExtension(upload?.filename || '');
   const mimeType = String(upload?.mimeType || '').toLowerCase();
   const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
+
+  if (mimeType === 'application/pdf' || extension === '.pdf') {
+    return extractPdfText(buffer);
+  }
 
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -63,21 +95,12 @@ async function extractTextFromUpload(upload) {
 function buildClaudeContentForUpload(upload, resumeText) {
   const extension = getFileExtension(upload?.filename || '');
   const mimeType = String(upload?.mimeType || '').toLowerCase();
-  const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
 
   if (mimeType === 'application/pdf' || extension === '.pdf') {
     return [
       {
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: buffer.toString('base64'),
-        },
-      },
-      {
         type: 'text',
-        text: 'Extract structured profile data from this resume. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.',
+        text: `Extract structured profile data from this resume text. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.\n\nResume text:\n${String(resumeText || '').slice(0, 24000)}`,
       },
     ];
   }
@@ -253,13 +276,15 @@ function extractFallbackProfile(resumeText) {
 
 async function analyzeWithClaude(upload, resumeText) {
   const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
+  const localResumeText = String(resumeText || '').trim();
 
   if (!apiKey) {
-    if (String(resumeText || '').trim()) {
-      return extractFallbackProfile(resumeText);
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
     }
 
     const error = new Error('ANTHROPIC_API_KEY not set');
+    console.error('[resume/analyze] Missing ANTHROPIC_API_KEY');
     error.status = 500;
     throw error;
   }
@@ -287,6 +312,15 @@ async function analyzeWithClaude(upload, resumeText) {
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[resume/analyze] Claude request failed', {
+      status: response.status,
+      statusText: response.statusText,
+      errorText,
+    });
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
+    }
+
     throw new Error(`Claude request failed with status ${response.status}: ${errorText}`);
   }
 
@@ -299,10 +333,27 @@ async function analyzeWithClaude(upload, resumeText) {
     .trim();
 
   if (!text) {
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
+    }
+
     throw new Error('Claude returned an empty response.');
   }
 
-  return normalizeResumeData(parseJsonResponse(text));
+  try {
+    return normalizeResumeData(parseJsonResponse(text));
+  } catch (parseError) {
+    console.error('[resume/analyze] Claude response parse failed', {
+      message: parseError?.message,
+      stack: parseError?.stack,
+    });
+
+    if (localResumeText) {
+      return extractFallbackProfile(localResumeText);
+    }
+
+    throw parseError;
+  }
 }
 
 export async function POST(request) {
@@ -337,10 +388,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
     }
 
-    const isPdfUpload = getFileExtension(fileUpload.filename) === '.pdf' || String(fileUpload.mimeType || '').toLowerCase() === 'application/pdf';
-    const extractedText = isPdfUpload ? '' : sanitizeText(await extractTextFromUpload(fileUpload));
+    const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
 
-    if (!extractedText && !isPdfUpload) {
+    if (!extractedText) {
       return NextResponse.json({ error: 'Analysis failed. Please try again.' }, { status: 422 });
     }
 
@@ -361,6 +411,12 @@ export async function POST(request) {
     const isAuthIssue = message.includes('ANTHROPIC_API_KEY');
     const isTooLarge = /too large|file size/i.test(message) || status === 413;
     const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
+
+    console.error('[resume/analyze] Request failed', {
+      message,
+      status,
+      stack: error?.stack,
+    });
 
     return NextResponse.json(
       {
