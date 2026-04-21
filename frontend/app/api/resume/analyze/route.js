@@ -34,7 +34,7 @@ async function extractPdfText(buffer) {
   try {
     const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const pdfjs = pdfjsModule.default || pdfjsModule;
-    const document = await pdfjs.getDocument({ data: buffer, useWorkerFetch: false, isEvalSupported: false }).promise;
+    const document = await pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false }).promise;
     const pageTexts = [];
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
@@ -54,7 +54,7 @@ async function extractPdfText(buffer) {
     await document.destroy();
     return pageTexts.join(' ').replace(/\s+/g, ' ').trim();
   } catch {
-    return Buffer.from(buffer).toString('utf8').replace(/\s+/g, ' ').trim();
+    return '';
   }
 }
 
