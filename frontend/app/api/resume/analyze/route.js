@@ -420,6 +420,20 @@ export async function POST(request) {
       );
     }
 
+    if (isPdfUpload && !extractedText) {
+      const resumeData = await analyzeWithClaude(fileUpload, '');
+
+      return NextResponse.json(
+        {
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+          version: '1.0.0',
+          resumeData,
+        },
+        { status: 200 }
+      );
+    }
+
     const resumeData = await analyzeWithClaude(fileUpload, extractedText);
 
     return NextResponse.json(
