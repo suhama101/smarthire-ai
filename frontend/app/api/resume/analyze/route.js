@@ -96,8 +96,18 @@ function buildClaudeContentForUpload(upload, resumeText) {
   const extension = getFileExtension(upload?.filename || '');
   const mimeType = String(upload?.mimeType || '').toLowerCase();
   const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
+  const normalizedResumeText = String(resumeText || '').trim();
 
   if (mimeType === 'application/pdf' || extension === '.pdf') {
+    if (normalizedResumeText) {
+      return [
+        {
+          type: 'text',
+          text: `Extract structured profile data from this resume text. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.\n\nResume text:\n${normalizedResumeText.slice(0, 24000)}`,
+        },
+      ];
+    }
+
     return [
       {
         type: 'document',
@@ -379,7 +389,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
     }
 
-    const { fileUpload, fileTooLarge } = await parseMultipartRequest(request);
+    const { fields, fileUpload, fileTooLarge } = await parseMultipartRequest(request);
 
     if (fileTooLarge) {
       return NextResponse.json({ error: 'File too large. Max 4MB.' }, { status: 413 });
@@ -388,6 +398,8 @@ export async function POST(request) {
     if (!fileUpload?.buffer?.length) {
       return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
     }
+
+    const clientResumeText = sanitizeText(String(fields?.resumeText || ''));
 
     const fileName = String(fileUpload.filename || '');
     const extension = getFileExtension(fileName);
@@ -398,7 +410,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
     }
 
-    const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
+    const extractedText = clientResumeText || sanitizeText(await extractTextFromUpload(fileUpload));
 
     if (!extractedText && !isPdfUpload) {
       return NextResponse.json(

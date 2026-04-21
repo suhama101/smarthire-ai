@@ -44,6 +44,47 @@ export function sanitizeFileName(fileName) {
     .replace(/^_+|_+$/g, '');
 }
 
+export async function extractPdfTextFromFile(file) {
+  if (!file || typeof file !== 'object') {
+    return '';
+  }
+
+  const fileName = String(file.name || '').toLowerCase();
+  const mimeType = String(file.type || '').toLowerCase();
+  const isPdf = mimeType === 'application/pdf' || fileName.endsWith('.pdf');
+
+  if (!isPdf) {
+    return '';
+  }
+
+  try {
+    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjs = pdfjsModule.default || pdfjsModule;
+    const buffer = await file.arrayBuffer();
+    const document = await pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false }).promise;
+    const pageTexts = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (pageText) {
+        pageTexts.push(pageText);
+      }
+    }
+
+    await document.destroy();
+    return pageTexts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
 export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — please check your connection') {
   const responseMessage = String(error?.response?.data?.error || error?.message || '').trim();
 

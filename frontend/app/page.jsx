@@ -6,7 +6,7 @@ import axios from 'axios';
 import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, FileUp, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
-import { getFriendlyApiError, validateResumeFile } from '../src/lib/input-utils';
+import { extractPdfTextFromFile, getFriendlyApiError, validateResumeFile } from '../src/lib/input-utils';
 
 const FEATURE_CARDS = [
   {
@@ -136,6 +136,14 @@ export default function LandingPage() {
     try {
       const formData = new FormData();
       formData.append('resume', selectedResume);
+
+      if (String(selectedResume?.type || '').toLowerCase() === 'application/pdf' || String(selectedResume?.name || '').toLowerCase().endsWith('.pdf')) {
+        const pdfText = await extractPdfTextFromFile(selectedResume);
+
+        if (pdfText) {
+          formData.append('resumeText', pdfText);
+        }
+      }
 
       const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
       setResumeAnalysis(response.data?.resumeData || null);
