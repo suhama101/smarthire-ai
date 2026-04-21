@@ -67,6 +67,10 @@ export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — 
     return 'AI analysis temporarily unavailable. Please try again in a moment.';
   }
 
+  if (/could not extract readable text from this pdf/i.test(responseMessage)) {
+    return 'This PDF appears to be scanned or image-based. Please upload a text-based PDF or DOCX file.';
+  }
+
   if (/network|failed to fetch|timeout|connection/i.test(responseMessage)) {
     return fallbackMessage;
   }

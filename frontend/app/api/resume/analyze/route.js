@@ -383,6 +383,7 @@ export async function POST(request) {
     const fileName = String(fileUpload.filename || '');
     const extension = getFileExtension(fileName);
     const allowedExtensions = new Set(['.pdf', '.docx', '.txt', '.md']);
+    const isPdfUpload = extension === '.pdf' || String(fileUpload.mimeType || '').toLowerCase() === 'application/pdf';
 
     if (!allowedExtensions.has(extension)) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
@@ -391,7 +392,14 @@ export async function POST(request) {
     const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
 
     if (!extractedText) {
-      return NextResponse.json({ error: 'Analysis failed. Please try again.' }, { status: 422 });
+      return NextResponse.json(
+        {
+          error: isPdfUpload
+            ? 'Could not extract readable text from this PDF. Please upload a text-based PDF or DOCX file.'
+            : 'Analysis failed. Please try again.',
+        },
+        { status: 422 }
+      );
     }
 
     const resumeData = await analyzeWithClaude(fileUpload, extractedText);
