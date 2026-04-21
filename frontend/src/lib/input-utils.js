@@ -93,6 +93,10 @@ export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — 
       return 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.';
     }
 
+    if (/credit balance is too low|purchase credits|plans & billing/i.test(responseMessage)) {
+      return 'Anthropic credit balance is too low. Add credits or upgrade the Anthropic plan, then try again.';
+    }
+
     if (/too large/i.test(responseMessage)) {
       return 'File too large. Max 4MB.';
     }
