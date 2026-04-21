@@ -1,8 +1,9 @@
-// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// REQUIRED ENV VAR: GEMINI_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Anthropic API key from https://console.anthropic.com
+// Value: your Gemini API key from https://aistudio.google.com/apikey
 
 import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
@@ -10,8 +11,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 const JOB_SKILL_KEYWORDS = [
   'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
   'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
@@ -28,7 +30,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Claude response did not contain valid JSON.');
+      throw new Error('Gemini response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -164,7 +166,7 @@ async function extractResumeFromBase64(fileBase64, fileName, mimeType) {
   return { buffer, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
 }
 
-function buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex) {
+function buildGeminiPrompt(jobTitle, companyName, jobDescription, candidateIndex) {
   return `You are an expert recruiter. Read this resume and compare it against this job: "${String(jobTitle || '').trim()}".
 Job Description: "${String(jobDescription || '').trim()}"
 
@@ -200,17 +202,15 @@ Rules:
 - Return ONLY valid JSON. No markdown. No explanation.`;
 }
 
-async function callClaude(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex) {
-  const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
-
+async function callGemini(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex) {
   const resume = await extractResumeFromBase64(fileBase64, fileName, mimeType);
 
-  if (!apiKey) {
+  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
     if (resume.text) {
       return buildFallbackMatch({ summary: resume.text }, jobTitle, jobDescription, candidateIndex);
     }
 
-    const error = new Error('ANTHROPIC_API_KEY not set');
+    const error = new Error('GEMINI_API_KEY not set');
     error.status = 500;
     throw error;
   }
@@ -219,59 +219,26 @@ async function callClaude(jobTitle, companyName, jobDescription, fileBase64, fil
   const content = isPdf
     ? [
         {
-          type: 'document',
-          source: {
-            type: 'base64',
-            media_type: 'application/pdf',
+          inlineData: {
+            mimeType: 'application/pdf',
             data: String(fileBase64 || ''),
           },
         },
         {
-          type: 'text',
-          text: buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex),
+          text: buildGeminiPrompt(jobTitle, companyName, jobDescription, candidateIndex),
         },
       ]
     : [
         {
-          type: 'text',
-          text: `${buildClaudePrompt(jobTitle, companyName, jobDescription, candidateIndex)}\n\nResume text:\n${String(resume.text || '').trim()}`,
+          text: `${buildGeminiPrompt(jobTitle, companyName, jobDescription, candidateIndex)}\n\nResume text:\n${String(resume.text || '').trim()}`,
         },
       ];
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude request failed with status ${response.status}: ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const text = (Array.isArray(payload?.content) ? payload.content : [])
-    .filter((item) => item?.type === 'text' && typeof item.text === 'string')
-    .map((item) => item.text)
-    .join('\n')
-    .trim();
+  const result = await model.generateContent(content);
+  const text = String(result?.response?.text?.() || '').trim();
 
   if (!text) {
-    throw new Error('Claude returned an empty response.');
+    throw new Error('Gemini returned an empty response.');
   }
 
   return normalizeBatchResult(parseJsonResponse(text), { candidateIndex });
@@ -298,7 +265,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'fileBase64, fileName, jobTitle, and jobDescription are required.' }, { status: 400 });
     }
 
-    const result = await callClaude(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex);
+    const result = await callGemini(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex);
 
     return NextResponse.json(
       {
@@ -312,15 +279,15 @@ export async function POST(request) {
   } catch (error) {
     const status = Number(error?.status) || 500;
     const message = error?.message || 'Batch analysis failed.';
-    const isAuthIssue = message.includes('ANTHROPIC_API_KEY');
-    const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
+    const isAuthIssue = message.includes('GEMINI_API_KEY');
+    const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
 
     return NextResponse.json(
       {
         error: isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
             : isAuthIssue
-              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
               : 'Batch analysis failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }

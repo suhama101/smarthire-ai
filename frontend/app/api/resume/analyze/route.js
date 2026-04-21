@@ -1,11 +1,11 @@
-// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// REQUIRED ENV VAR: GEMINI_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Anthropic API key from https://console.anthropic.com
+// Value: your Gemini API key from https://aistudio.google.com/apikey
 
 import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
 import { Readable } from 'node:stream';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
@@ -14,11 +14,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
-const MAX_OUTPUT_TOKENS = 2048;
-const anthropicClient = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
@@ -96,7 +94,7 @@ async function extractTextFromUpload(upload) {
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
 }
 
-function buildClaudePrompt(upload, resumeText) {
+function buildGeminiPrompt(upload, resumeText) {
   const extension = getFileExtension(upload?.filename || '');
   const mimeType = String(upload?.mimeType || '').toLowerCase();
   const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
@@ -107,25 +105,23 @@ function buildClaudePrompt(upload, resumeText) {
   if (mimeType === 'application/pdf' || extension === '.pdf') {
     if (normalizedResumeText) {
       return [
-        { type: 'text', text: `${basePrompt}\n\nResume text:\n${normalizedResumeText.slice(0, 24000)}` },
+        `${basePrompt}\n\nResume text:\n${normalizedResumeText.slice(0, 24000)}`,
       ];
     }
 
     return [
       {
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
+        inlineData: {
+          mimeType: 'application/pdf',
           data: buffer.toString('base64'),
         },
       },
-      { type: 'text', text: basePrompt },
+      basePrompt,
     ];
   }
 
   return [
-    { type: 'text', text: `${basePrompt}\n\nResume text:\n${String(resumeText || '').slice(0, 24000)}` },
+    `${basePrompt}\n\nResume text:\n${String(resumeText || '').slice(0, 24000)}`,
   ];
 }
 
@@ -239,7 +235,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Claude response did not contain valid JSON.');
+      throw new Error('Gemini response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -290,56 +286,41 @@ function extractFallbackProfile(resumeText) {
   });
 }
 
-function extractClaudeText(response) {
-  const content = Array.isArray(response?.content) ? response.content : [];
-
-  return content
-    .filter((item) => item?.type === 'text' && typeof item.text === 'string')
-    .map((item) => item.text)
-    .join('\n')
-    .trim();
+function extractGeminiText(response) {
+  return String(response?.text?.() || response?.response?.text?.() || '').trim();
 }
 
-async function analyzeWithClaude(upload, resumeText) {
+async function analyzeWithGemini(upload, resumeText) {
   const localResumeText = String(resumeText || '').trim();
 
-  if (!String(process.env.ANTHROPIC_API_KEY || '').trim()) {
+  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
     if (localResumeText) {
       return extractFallbackProfile(localResumeText);
     }
 
-    const error = new Error('ANTHROPIC_API_KEY not set');
-    console.error('[resume/analyze] Missing ANTHROPIC_API_KEY');
+    const error = new Error('GEMINI_API_KEY not set');
+    console.error('[resume/analyze] Missing GEMINI_API_KEY');
     error.status = 500;
     throw error;
   }
 
-  const response = await anthropicClient.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    temperature: 0,
-    messages: [
-      {
-        role: 'user',
-        content: buildClaudePrompt(upload, resumeText),
-      },
-    ],
-  });
+  const prompt = buildGeminiPrompt(upload, resumeText);
+  const response = await model.generateContent(prompt);
 
-  const text = extractClaudeText(response);
+  const text = extractGeminiText(response?.response || response);
 
   if (!text) {
     if (localResumeText) {
       return extractFallbackProfile(localResumeText);
     }
 
-    throw new Error('Claude returned an empty response.');
+    throw new Error('Gemini returned an empty response.');
   }
 
   try {
     return normalizeResumeData(parseJsonResponse(text));
   } catch (parseError) {
-    console.error('[resume/analyze] Claude response parse failed', {
+    console.error('[resume/analyze] Gemini response parse failed', {
       message: parseError?.message,
       stack: parseError?.stack,
     });
@@ -399,7 +380,7 @@ export async function POST(request) {
     }
 
     if (isPdfUpload && !extractedText) {
-      const resumeData = await analyzeWithClaude(fileUpload, '');
+      const resumeData = await analyzeWithGemini(fileUpload, '');
 
       return NextResponse.json(
         {
@@ -412,7 +393,7 @@ export async function POST(request) {
       );
     }
 
-    const resumeData = await analyzeWithClaude(fileUpload, extractedText);
+    const resumeData = await analyzeWithGemini(fileUpload, extractedText);
 
     return NextResponse.json(
       {
@@ -426,9 +407,9 @@ export async function POST(request) {
   } catch (error) {
     const message = error?.message || 'Analysis failed. Please try again.';
     const status = Number(error?.status) || 500;
-    const isAuthIssue = /ANTHROPIC_API_KEY|api key/i.test(message);
+    const isAuthIssue = /GEMINI_API_KEY|api key/i.test(message);
     const isTooLarge = /too large|file size/i.test(message) || status === 413;
-    const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
+    const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
 
     console.error('[resume/analyze] Request failed', {
       message,
@@ -443,7 +424,7 @@ export async function POST(request) {
           : isTemporary
             ? message
             : isAuthIssue
-              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
               : message,
       },
       { status: status >= 400 ? status : 500 }

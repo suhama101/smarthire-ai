@@ -1,8 +1,9 @@
-// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// REQUIRED ENV VAR: GEMINI_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Anthropic API key from https://console.anthropic.com
+// Value: your Gemini API key from https://aistudio.google.com/apikey
 
 import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
@@ -10,8 +11,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 const JOB_SKILL_KEYWORDS = [
   'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
   'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
@@ -46,7 +48,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Claude response did not contain valid JSON.');
+      throw new Error('Gemini response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -109,14 +111,12 @@ function buildFallbackMatch(candidateProfile, jobTitle, jobDescription) {
     niceToHaveSkills: missingSkills.slice(0, 3),
     experienceFit: matchScore >= 80 ? 'Strong' : matchScore >= 60 ? 'Moderate' : 'Weak',
     recommendation: matchScore >= 80 ? 'Highly Recommended' : matchScore >= 60 ? 'Consider with Reservations' : 'Not Recommended',
-    recommendationReason: 'Fallback analysis used because ANTHROPIC_API_KEY is not configured.',
+    recommendationReason: 'Fallback analysis used because GEMINI_API_KEY is not configured.',
   });
 }
 
 async function analyzeMatch(candidateProfile, jobTitle, jobDescription) {
-  const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
-
-  if (!apiKey) {
+  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
     return buildFallbackMatch(candidateProfile, jobTitle, jobDescription);
   }
 
@@ -132,40 +132,11 @@ Candidate Profile: ${JSON.stringify(candidateProfile)}
 Job Title: ${String(jobTitle || '').trim()}
 Job Description: ${String(jobDescription || '').trim()}`;
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1400,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude request failed with status ${response.status}: ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const text = (Array.isArray(payload?.content) ? payload.content : [])
-    .filter((item) => item?.type === 'text' && typeof item.text === 'string')
-    .map((item) => item.text)
-    .join('\n')
-    .trim();
+  const result = await model.generateContent(prompt);
+  const text = String(result?.response?.text?.() || '').trim();
 
   if (!text) {
-    throw new Error('Claude returned an empty response.');
+    throw new Error('Gemini returned an empty response.');
   }
 
   return normalizeMatchData(parseJsonResponse(text));
@@ -206,15 +177,15 @@ export async function POST(request) {
   } catch (error) {
     const status = Number(error?.status) || 500;
     const message = error?.message || 'Job matching failed.';
-    const isAuthIssue = message.includes('ANTHROPIC_API_KEY');
-    const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
+    const isAuthIssue = message.includes('GEMINI_API_KEY');
+    const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
 
     return NextResponse.json(
       {
         error: isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
             : isAuthIssue
-              ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+              ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
               : 'Job matching failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }

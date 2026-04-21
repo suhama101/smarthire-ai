@@ -1,8 +1,9 @@
-// REQUIRED ENV VAR: ANTHROPIC_API_KEY
+// REQUIRED ENV VAR: GEMINI_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Anthropic API key from https://console.anthropic.com
+// Value: your Gemini API key from https://aistudio.google.com/apikey
 
 import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
@@ -10,8 +11,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
 function dedupeStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
@@ -26,7 +28,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Claude response did not contain valid JSON.');
+      throw new Error('Gemini response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -105,9 +107,7 @@ function buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, m
 }
 
 async function generateLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult) {
-  const apiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
-
-  if (!apiKey) {
+  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
     return buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult);
   }
 
@@ -122,40 +122,11 @@ Job Title: ${String(jobTitle || '').trim()}
 Missing Skills: ${JSON.stringify(matchResult?.missingSkills || [])}
 Match Score: ${Number(matchResult?.matchScore || 0)}`;
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1800,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude request failed with status ${response.status}: ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const text = (Array.isArray(payload?.content) ? payload.content : [])
-    .filter((item) => item?.type === 'text' && typeof item.text === 'string')
-    .map((item) => item.text)
-    .join('\n')
-    .trim();
+  const result = await model.generateContent(prompt);
+  const text = String(result?.response?.text?.() || '').trim();
 
   if (!text) {
-    throw new Error('Claude returned an empty response.');
+    throw new Error('Gemini returned an empty response.');
   }
 
   return normalizeLearningPlan(parseJsonResponse(text));
@@ -203,8 +174,8 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: message.includes('ANTHROPIC_API_KEY')
-          ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
+        error: message.includes('GEMINI_API_KEY')
+          ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
           : 'Learning plan generation failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }
