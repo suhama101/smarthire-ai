@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 const JOB_SKILL_KEYWORDS = [
@@ -57,17 +57,14 @@ function parseJsonResponse(text) {
 
 function normalizeMatchData(raw) {
   const data = raw && typeof raw === 'object' ? raw : {};
+  const recommendation = String(data.recommendation || '').trim();
 
   return {
     matchScore: clampScore(data.matchScore ?? data.overallScore),
     matchedSkills: normalizeArray(data.matchedSkills),
     missingSkills: normalizeArray(data.missingSkills),
-    niceToHaveSkills: normalizeArray(data.niceToHaveSkills),
-    experienceFit: String(data.experienceFit || '').trim(),
-    recommendation: ['Highly Recommended', 'Consider with Reservations', 'Not Recommended'].includes(data.recommendation)
-      ? data.recommendation
-      : 'Consider with Reservations',
-    recommendationReason: String(data.recommendationReason || '').trim(),
+    summary: String(data.summary || '').trim(),
+    recommendation: ['Strong Match', 'Good Match', 'Weak Match'].includes(recommendation) ? recommendation : 'Good Match',
   };
 }
 
@@ -95,10 +92,31 @@ function extractSkills(text) {
   );
 }
 
-function buildFallbackMatch(candidateProfile, jobTitle, jobDescription) {
+function buildResumeText(candidateProfile, resumeText) {
   const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
-  const candidateSkills = extractSkills(`${JSON.stringify(profile)} ${String(profile.summary || '')}`);
-  const jobSkills = extractSkills(`${jobTitle} ${jobDescription}`);
+  const sections = [
+    String(resumeText || '').trim(),
+    profile.name ? `Name: ${profile.name}` : '',
+    profile.email ? `Email: ${profile.email}` : '',
+    profile.title ? `Title: ${profile.title}` : '',
+    profile.summary ? `Summary: ${profile.summary}` : '',
+    Array.isArray(profile.skills) && profile.skills.length ? `Skills: ${profile.skills.join(', ')}` : '',
+    Array.isArray(profile.experience) && profile.experience.length
+      ? `Experience:\n${profile.experience.map((item) => [item?.title, item?.company, item?.duration, item?.description].filter(Boolean).join(' | ')).join('\n')}`
+      : '',
+    Array.isArray(profile.education) && profile.education.length
+      ? `Education:\n${profile.education.map((item) => [item?.degree, item?.institution, item?.year].filter(Boolean).join(' | ')).join('\n')}`
+      : '',
+  ];
+
+  return sections.filter(Boolean).join('\n\n').trim();
+}
+
+function buildFallbackMatch(candidateProfile, resumeText, jobDescription) {
+  const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
+  const candidateText = buildResumeText(profile, resumeText);
+  const candidateSkills = extractSkills(`${candidateText} ${JSON.stringify(profile)} ${String(profile.summary || '')}`);
+  const jobSkills = extractSkills(jobDescription);
   const matchedSkills = candidateSkills.filter((skill) => jobSkills.some((jobSkill) => skill.toLowerCase() === jobSkill.toLowerCase() || skill.toLowerCase().includes(jobSkill.toLowerCase()) || jobSkill.toLowerCase().includes(skill.toLowerCase())));
   const missingSkills = jobSkills.filter((skill) => !matchedSkills.some((matched) => matched.toLowerCase() === skill.toLowerCase()));
   const overlapRatio = matchedSkills.length / Math.max(jobSkills.length || 1, 1);
@@ -108,29 +126,30 @@ function buildFallbackMatch(candidateProfile, jobTitle, jobDescription) {
     matchScore,
     matchedSkills,
     missingSkills,
-    niceToHaveSkills: missingSkills.slice(0, 3),
-    experienceFit: matchScore >= 80 ? 'Strong' : matchScore >= 60 ? 'Moderate' : 'Weak',
-    recommendation: matchScore >= 80 ? 'Highly Recommended' : matchScore >= 60 ? 'Consider with Reservations' : 'Not Recommended',
-    recommendationReason: 'Fallback analysis used because GEMINI_API_KEY is not configured.',
+    summary: 'Fallback analysis used because GEMINI_API_KEY is not configured.',
+    recommendation: matchScore >= 80 ? 'Strong Match' : matchScore >= 60 ? 'Good Match' : 'Weak Match',
   });
 }
 
-async function analyzeMatch(candidateProfile, jobTitle, jobDescription) {
+async function analyzeMatch(candidateProfile, resumeText, jobDescription) {
+  const normalizedResumeText = buildResumeText(candidateProfile, resumeText);
+
   if (!String(process.env.GEMINI_API_KEY || '').trim()) {
-    return buildFallbackMatch(candidateProfile, jobTitle, jobDescription);
+    return buildFallbackMatch(candidateProfile, normalizedResumeText, jobDescription);
   }
 
-  const prompt = `You are an expert recruiter. Compare this candidate profile against the job description and return a JSON object with:
-- matchScore (0-100 integer)
-- matchedSkills (array of strings)
-- missingSkills (array of strings)
-- niceToHaveSkills (array of strings)
-- experienceFit (string, 2-3 sentences)
-- recommendation (one of: Highly Recommended, Consider with Reservations, Not Recommended)
-- recommendationReason (string, 1-2 sentences)
-Candidate Profile: ${JSON.stringify(candidateProfile)}
-Job Title: ${String(jobTitle || '').trim()}
-Job Description: ${String(jobDescription || '').trim()}`;
+  const prompt = `You are an expert recruiter. Compare this resume with the job description and return a JSON with:
+- matchScore: number 0-100
+- matchedSkills: array of skills that match
+- missingSkills: array of skills the candidate lacks
+- recommendation: 'Strong Match' | 'Good Match' | 'Weak Match'
+- summary: 2-3 sentence explanation
+
+Resume:
+${normalizedResumeText}
+
+Job Description:
+${String(jobDescription || '').trim()}`;
 
   const result = await model.generateContent(prompt);
   const text = String(result?.response?.text?.() || '').trim();
@@ -152,6 +171,7 @@ export async function POST(request) {
 
     const body = await request.json();
     const candidateProfile = body?.candidateProfile;
+    const resumeText = sanitizeText(body?.resumeText);
     const jobTitle = sanitizeText(body?.jobTitle);
     const jobDescription = sanitizeText(body?.jobDescription);
 
@@ -163,13 +183,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'jobDescription is required.' }, { status: 400 });
     }
 
-    const matchData = await analyzeMatch(candidateProfile, jobTitle, jobDescription);
+    const matchData = await analyzeMatch(candidateProfile, resumeText, jobDescription);
 
     return NextResponse.json(
       {
         status: 'ok',
         timestamp: new Date().toISOString(),
         version: '1.0.0',
+        resumeText,
+        jobDescription,
         ...matchData,
       },
       { status: 200 }

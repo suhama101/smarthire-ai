@@ -53,6 +53,40 @@ function buildLearningPlanText(plan, candidateName, jobTitle) {
   return lines.join('\n');
 }
 
+function buildResumeText(profile) {
+  if (!profile || typeof profile !== 'object') {
+    return '';
+  }
+
+  const sections = [
+    profile.name ? `Name: ${profile.name}` : '',
+    profile.email ? `Email: ${profile.email}` : '',
+    profile.title ? `Title: ${profile.title}` : '',
+    profile.summary ? `Summary: ${profile.summary}` : '',
+    Array.isArray(profile.skills) && profile.skills.length ? `Skills: ${profile.skills.join(', ')}` : '',
+    Array.isArray(profile.experience) && profile.experience.length
+      ? `Experience:\n${profile.experience.map((item) => [item?.title, item?.company, item?.duration, item?.description].filter(Boolean).join(' | ')).join('\n')}`
+      : '',
+    Array.isArray(profile.education) && profile.education.length
+      ? `Education:\n${profile.education.map((item) => [item?.degree, item?.institution, item?.year].filter(Boolean).join(' | ')).join('\n')}`
+      : '',
+  ];
+
+  return sections.filter(Boolean).join('\n\n').trim();
+}
+
+function recommendationTone(value) {
+  if (value === 'Strong Match') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  }
+
+  if (value === 'Weak Match') {
+    return 'border-rose-200 bg-rose-50 text-rose-700';
+  }
+
+  return 'border-amber-200 bg-amber-50 text-amber-700';
+}
+
 export default function CandidateWorkbench() {
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -111,8 +145,10 @@ export default function CandidateWorkbench() {
     setLearningPlan(null);
 
     try {
+      const resumeText = buildResumeText(resumeData);
       const response = await axios.post('/api/job/match', {
         candidateProfile: resumeData,
+        resumeText,
         jobTitle: nextJobTitle,
         jobDescription: nextJobDescription,
       }, { timeout: 120000 });
@@ -127,6 +163,7 @@ export default function CandidateWorkbench() {
         recommendation: nextResult?.recommendation || 'Review manually',
         fullResult: {
           resumeData,
+          resumeText,
           jobTitle: jobTitle.trim(),
           jobDescription: jobDescription.trim(),
           matchResult: nextResult,
@@ -211,12 +248,46 @@ export default function CandidateWorkbench() {
           </button>
 
           {matchResult ? (
-            <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-[#1A1A24] p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[#F1F1F3]">Match Result</p>
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${scoreTone(matchResult.matchScore)}`}>{matchResult.matchScore}%</span>
+            <div className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-[#1A1A24] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[#F1F1F3]">Match Result</p>
+                  <p className="mt-1 text-xs text-[#8B8B9E]">Resume compared against the pasted job description</p>
+                </div>
+                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${recommendationTone(matchResult.recommendation)}`}>
+                  {matchResult.recommendation || 'Good Match'}
+                </span>
               </div>
-              <p className="text-sm text-[#8B8B9E]">{matchResult.recommendation}</p>
+              <div className="flex items-end gap-3">
+                <span className={`inline-flex rounded-2xl border px-4 py-2 text-3xl font-semibold ${scoreTone(matchResult.matchScore)}`}>
+                  {Math.round(Number(matchResult.matchScore) || 0)}%
+                </span>
+                <p className="pb-1 text-sm text-[#8B8B9E]">Overall fit score</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Matched Skills</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(matchResult.matchedSkills || []).length ? matchResult.matchedSkills.map((skill) => (
+                    <span key={skill} className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      {skill}
+                    </span>
+                  )) : <span className="text-sm text-[#8B8B9E]">None found</span>}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Missing Skills</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(matchResult.missingSkills || []).length ? matchResult.missingSkills.map((skill) => (
+                    <span key={skill} className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                      {skill}
+                    </span>
+                  )) : <span className="text-sm text-[#8B8B9E]">None identified</span>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#0F0F13] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Summary</p>
+                <p className="mt-2 text-sm leading-6 text-[#F1F1F3]">{matchResult.summary || 'No summary was returned.'}</p>
+              </div>
               <button type="button" onClick={handleGeneratePlan} disabled={isGeneratingPlan} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#0F0F13] px-4 py-2.5 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
                 <GraduationCap className="h-4 w-4" />
                 {isGeneratingPlan ? 'Generating...' : 'Generate Learning Plan'}
