@@ -451,7 +451,6 @@ export async function POST(request) {
     const isAuthIssue = message.includes('ANTHROPIC_API_KEY');
     const isTooLarge = /too large|file size/i.test(message) || status === 413;
     const isTemporary = /Claude request failed|empty response|invalid JSON/i.test(message);
-    const isPdfIssue = /pdf/i.test(message) || /document/i.test(message);
 
     console.error('[resume/analyze] Request failed', {
       message,
@@ -463,8 +462,8 @@ export async function POST(request) {
       {
         error: isTooLarge
             ? 'File too large. Max 4MB.'
-          : isTemporary || isPdfIssue
-            ? 'This PDF could not be analyzed. Please upload a text-based PDF or DOCX file.'
+          : isTemporary
+            ? message
             : isAuthIssue
               ? 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.'
               : message,
