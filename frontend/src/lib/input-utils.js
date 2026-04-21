@@ -89,12 +89,12 @@ export function getFriendlyApiError(error, fallbackMessage = 'Upload failed — 
   const responseMessage = String(error?.response?.data?.error || error?.message || '').trim();
 
   if (responseMessage) {
-    if (/gemini_api_key|api key/i.test(responseMessage)) {
-      return 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.';
+    if (/anthropic_api_key|api key/i.test(responseMessage)) {
+      return 'Server configuration error. Contact admin to set ANTHROPIC_API_KEY in Vercel.';
     }
 
     if (/quota|billing|rate limit|resource exhausted|credit/i.test(responseMessage)) {
-      return 'Gemini request limit reached. Try again later or check the API project billing settings.';
+      return 'Claude request limit reached. Try again later or check the API project billing settings.';
     }
 
     if (/too large/i.test(responseMessage)) {
