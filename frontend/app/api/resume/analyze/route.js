@@ -95,7 +95,34 @@ async function extractTextFromUpload(upload) {
 function buildClaudeContentForUpload(upload, resumeText) {
   const extension = getFileExtension(upload?.filename || '');
   const mimeType = String(upload?.mimeType || '').toLowerCase();
+  const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
   const normalizedResumeText = String(resumeText || '').trim();
+
+  if (mimeType === 'application/pdf' || extension === '.pdf') {
+    if (normalizedResumeText) {
+      return [
+        {
+          type: 'text',
+          text: `Extract structured profile data from this resume text. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.\n\nResume text:\n${normalizedResumeText.slice(0, 24000)}`,
+        },
+      ];
+    }
+
+    return [
+      {
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: buffer.toString('base64'),
+        },
+      },
+      {
+        type: 'text',
+        text: 'Extract structured profile data from this resume. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.',
+      },
+    ];
+  }
 
   return [
     {
@@ -385,12 +412,10 @@ export async function POST(request) {
 
     const extractedText = clientResumeText || sanitizeText(await extractTextFromUpload(fileUpload));
 
-    if (!extractedText) {
+    if (!extractedText && !isPdfUpload) {
       return NextResponse.json(
         {
-          error: isPdfUpload
-            ? 'Could not extract readable text from this PDF. Please upload a text-based PDF or DOCX file.'
-            : 'Analysis failed. Please try again.',
+          error: 'Analysis failed. Please try again.',
         },
         { status: 422 }
       );
