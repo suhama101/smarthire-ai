@@ -437,67 +437,87 @@ export default function BatchResumeUploadPage() {
     const workingFiles = files.map((file) => ({ ...file, status: 'Queued', error: '', result: null, resumeText: '' }));
     setFiles(workingFiles);
 
-    const results = [];
+    try {
+      setProgress({ current: 1, total: 1, label: `Processing ${workingFiles.length} resumes...` });
 
-    for (let index = 0; index < workingFiles.length; index += 1) {
-      const fileEntry = workingFiles[index];
+      const formData = new FormData();
 
-      setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Processing' } : item)));
-      setProgress({ current: index + 1, total: workingFiles.length, label: `Processing ${index + 1} of ${workingFiles.length} resumes...` });
+      workingFiles.forEach((fileEntry) => {
+        formData.append('resumes', fileEntry.file);
+      });
 
-      try {
-        const formData = new FormData();
-        formData.append('file', fileEntry.file);
-        formData.append('jobTitle', sanitizeText(savedJob.jobTitle));
-        formData.append('companyName', sanitizeText(savedJob.companyName));
-        formData.append('jobDescription', sanitizeText(savedJob.jobDescription));
-        formData.append('candidateIndex', String(index + 1));
+      formData.append('jobTitle', sanitizeText(savedJob.jobTitle));
+      formData.append('companyName', sanitizeText(savedJob.companyName));
+      formData.append('jobDescription', sanitizeText(savedJob.jobDescription));
 
-        const response = await fetch('/api/batch/analyze', {
-          method: 'POST',
-          body: formData,
-        });
+      const response = await fetch('/api/batch/analyze', {
+        method: 'POST',
+        body: formData,
+      });
 
-        const responseData = await response.json().catch(() => ({}));
+      const responseData = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-          throw new Error(responseData?.error || 'Resume analysis failed.');
+      if (!response.ok) {
+        throw new Error(responseData?.error || 'Batch analysis failed. Please try again.');
+      }
+
+      const rankedResults = Array.isArray(responseData?.rankedCandidates)
+        ? responseData.rankedCandidates.map((candidate, index) => ({
+            ...normalizeBatchResult(
+              {
+                ...candidate,
+                candidateName: candidate?.candidateName || candidate?.name,
+                matchScore: Number.isFinite(Number(candidate?.matchScore)) ? Number(candidate.matchScore) : candidate?.score,
+              },
+              candidate?.candidateName || candidate?.name || workingFiles[index]?.name || `Candidate ${index + 1}`
+            ),
+            sourceFileName: workingFiles[index]?.name || candidate?.name || `Candidate ${index + 1}`,
+            rank: Number.isFinite(Number(candidate?.rank)) ? Number(candidate.rank) : index + 1,
+          }))
+        : [];
+
+      const rankedByScore = rankedResults.length
+        ? [...rankedResults].sort((left, right) => Number(right.matchScore) - Number(left.matchScore)).map((result, index) => ({ ...result, rank: index + 1 }))
+        : [];
+
+      const rankedMap = new Map(rankedByScore.map((result) => [result.sourceFileName || result.candidateName, result]));
+
+      setFiles((current) => current.map((item) => {
+        const completed = rankedMap.get(item.name) || rankedByScore.find((result) => result.sourceFileName === item.name || result.candidateName === item.name);
+
+        if (!completed) {
+          return { ...item, status: 'Failed', error: 'Batch analysis failed. Please try again.' };
         }
 
-        const normalized = normalizeBatchResult(responseData, fileEntry.name);
-        const completedResult = { ...normalized, sourceFileName: fileEntry.name, rank: index + 1 };
-        results.push(completedResult);
+        return { ...item, status: 'Done', error: '', result: completed };
+      }));
 
-        setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Done', error: '', result: completedResult } : item)));
-      } catch (itemError) {
-        const message = getFriendlyApiError(itemError, 'Resume analysis failed.');
-        setFiles((current) => current.map((item) => (item.id === fileEntry.id ? { ...item, status: 'Failed', error: message } : item)));
-      }
+      const completedBatch = {
+        id: `batch-${Date.now()}`,
+        batchName: buildBatchName(savedJob),
+        jobTitle: savedJob.jobTitle,
+        companyName: savedJob.companyName,
+        jobDescription: savedJob.jobDescription,
+        createdAt: new Date().toISOString(),
+        totalResumes: workingFiles.length,
+        averageScore: rankedByScore.length ? rankedByScore.reduce((sum, result) => sum + (Number(result.matchScore) || 0), 0) / rankedByScore.length : 0,
+        topCandidate: rankedByScore[0]?.candidateName || '--',
+        results: rankedByScore,
+      };
 
-      if (index < workingFiles.length - 1) {
-        await delay(PROCESS_DELAY_MS);
-      }
+      addBatchRun(completedBatch);
+      setBatchRun(completedBatch);
+      setProgress({ current: workingFiles.length, total: workingFiles.length, label: 'Batch analysis complete.' });
+      setIsProcessing(false);
+      return;
+    } catch (itemError) {
+      const message = getFriendlyApiError(itemError, 'Batch analysis failed. Please try again.');
+      setFiles((current) => current.map((item) => (item.status === 'Done' ? item : { ...item, status: 'Failed', error: message })));
+      setError(message);
+      setProgress({ current: 0, total: 0, label: '' });
+      setIsProcessing(false);
+      return;
     }
-
-    const rankedResults = results.sort((left, right) => Number(right.matchScore) - Number(left.matchScore)).map((result, index) => ({ ...result, rank: index + 1 }));
-
-    const completedBatch = {
-      id: `batch-${Date.now()}`,
-      batchName: buildBatchName(savedJob),
-      jobTitle: savedJob.jobTitle,
-      companyName: savedJob.companyName,
-      jobDescription: savedJob.jobDescription,
-      createdAt: new Date().toISOString(),
-      totalResumes: workingFiles.length,
-      averageScore: rankedResults.length ? rankedResults.reduce((sum, result) => sum + (Number(result.matchScore) || 0), 0) / rankedResults.length : 0,
-      topCandidate: rankedResults[0]?.candidateName || '--',
-      results: rankedResults,
-    };
-
-    addBatchRun(completedBatch);
-    setBatchRun(completedBatch);
-    setProgress({ current: workingFiles.length, total: workingFiles.length, label: 'Batch analysis complete.' });
-    setIsProcessing(false);
   }
 
   function toggleSort(key) {

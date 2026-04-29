@@ -32,39 +32,27 @@ describe('BatchResumeUploadPage', () => {
     };
 
     global.fetch = jest.fn().mockImplementation(async (_url, options) => {
-      const body = options.body;
-      const fileEntry = body.get('file');
-      const response = String(fileEntry?.name || '').includes('ava')
-        ? {
-            candidateName: 'Ava Chen',
-            matchScore: 96,
-            matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
-            missingSkills: ['Docker'],
-            experienceFit: 'Strong',
-            recommendation: 'Strongly Recommended',
-            profile: {
+      const files = Array.from(options.body.getAll('resumes'));
+      const response = {
+        message: 'Batch analysis completed successfully!',
+        rankedCandidates: files.map((file) => {
+          if (String(file?.name || '').includes('ava')) {
+            return {
+              rank: 1,
               name: 'Ava Chen',
-              email: 'ava@example.com',
-              summary: 'Frontend leader with product delivery experience.',
-              experience: [{ title: 'Frontend Engineer', company: 'Acme', duration: '3 years' }],
-              education: [{ degree: 'BSc Computer Science', institution: 'State University', year: '2024' }],
-            },
+              score: 96,
+              matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
+            };
           }
-        : {
-            candidateName: 'Noah Patel',
-            matchScore: 91,
+
+          return {
+            rank: 2,
+            name: 'Noah Patel',
+            score: 91,
             matchedSkills: ['Node.js', 'Express', 'PostgreSQL'],
-            missingSkills: ['Kubernetes'],
-            experienceFit: 'Moderate',
-            recommendation: 'Recommended',
-            profile: {
-              name: 'Noah Patel',
-              email: 'noah@example.com',
-              summary: 'Backend engineer with API and database depth.',
-              experience: [{ title: 'Backend Engineer', company: 'Nova', duration: '2 years' }],
-              education: [],
-            },
           };
+        }),
+      };
 
       return {
         ok: true,
@@ -95,11 +83,9 @@ describe('BatchResumeUploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Start Batch Analysis' }));
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(fetch.mock.calls[0][1].body.get('file').name).toBe('ava-chen.pdf');
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0][1].body.getAll('resumes').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
       expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
-      expect(fetch.mock.calls[1][1].body.get('file').name).toBe('noah-patel.docx');
-      expect(fetch.mock.calls[1][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);

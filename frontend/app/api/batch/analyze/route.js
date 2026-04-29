@@ -235,6 +235,26 @@ async function extractResumeFromUpload(upload, fallbackName = '') {
   return extractResumeFromBase64(upload.fileBase64 || '', upload.fileName || fallbackName, upload.mimeType || '');
 }
 
+async function extractUploadsFromFormData(formData) {
+  const uploads = [];
+
+  for (const value of formData.getAll('resumes')) {
+    if (value && typeof value.arrayBuffer === 'function') {
+      uploads.push(value);
+    }
+  }
+
+  if (!uploads.length) {
+    const fallbackUpload = formData.get('file') || formData.get('resume');
+
+    if (fallbackUpload && typeof fallbackUpload.arrayBuffer === 'function') {
+      uploads.push(fallbackUpload);
+    }
+  }
+
+  return uploads;
+}
+
 function buildGeminiPrompt(jobTitle, companyName, jobDescription, candidateIndex) {
   return `You are an expert recruiter. Read this resume and compare it against this job: "${String(jobTitle || '').trim()}".
 Job Description: "${String(jobDescription || '').trim()}"
@@ -312,6 +332,44 @@ async function callGemini(jobTitle, companyName, jobDescription, fileBase64, fil
   }
 }
 
+async function analyzeUploads(jobTitle, companyName, jobDescription, uploads) {
+  const rankedCandidates = [];
+
+  for (let index = 0; index < uploads.length; index += 1) {
+    const upload = uploads[index];
+    const extracted = await extractResumeFromUpload(upload, upload?.name || `resume-${index + 1}`);
+    const result = await callGemini(
+      jobTitle,
+      companyName,
+      jobDescription,
+      extracted.fileBase64,
+      extracted.fileName,
+      extracted.mimeType,
+      index + 1
+    );
+
+    rankedCandidates.push({
+      rank: index + 1,
+      candidateName: result.candidateName || `Candidate ${index + 1}`,
+      name: result.candidateName || `Candidate ${index + 1}`,
+      score: Number(result.matchScore) || 0,
+      matchScore: Number(result.matchScore) || 0,
+      matchedSkills: Array.isArray(result.matchedSkills) ? result.matchedSkills : [],
+    });
+  }
+
+  return rankedCandidates
+    .sort((left, right) => right.score - left.score || String(left.name).localeCompare(String(right.name)))
+    .map((candidate, index) => ({
+      rank: index + 1,
+      candidateName: candidate.candidateName || candidate.name,
+      name: candidate.name,
+      score: candidate.score,
+      matchScore: candidate.matchScore,
+      matchedSkills: candidate.matchedSkills,
+    }));
+}
+
 export async function POST(request) {
   try {
     const rateLimit = checkRateLimit(request, 'batch-analyze');
@@ -331,21 +389,25 @@ export async function POST(request) {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      const upload = formData.get('file') || formData.get('resume');
+      const uploads = await extractUploadsFromFormData(formData);
 
       jobTitle = sanitizeText(formData.get('jobTitle'));
       jobDescription = sanitizeText(formData.get('jobDescription'));
-      candidateIndex = Number(formData.get('candidateIndex') || 1);
       companyName = sanitizeText(formData.get('companyName') || 'Recruiter Batch');
 
-      if (!upload || typeof upload.arrayBuffer !== 'function') {
-        return NextResponse.json({ error: 'fileBase64, fileName, jobTitle, and jobDescription are required.' }, { status: 400 });
+      if (!uploads.length) {
+        return NextResponse.json({ error: 'Please upload at least one resume file.' }, { status: 400 });
       }
 
-      const extracted = await extractResumeFromUpload(upload, upload?.name || 'resume');
-      fileBase64 = extracted.fileBase64;
-      fileName = extracted.fileName;
-      mimeType = extracted.mimeType;
+      const rankedCandidates = await analyzeUploads(jobTitle, companyName, jobDescription, uploads);
+
+      return NextResponse.json(
+        {
+          message: 'Batch analysis completed successfully!',
+          rankedCandidates,
+        },
+        { status: 200 }
+      );
     } else {
       const body = await request.json();
       fileBase64 = String(body?.fileBase64 || '').trim();
