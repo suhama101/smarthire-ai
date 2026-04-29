@@ -12,6 +12,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const uploadsDir = path.join(os.tmpdir(), 'smarthire-ai-uploads');
+const MAX_FILES_PER_UPLOAD = 20;
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -26,24 +27,29 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: MAX_UPLOAD_MB * 1024 * 1024,
-    files: 20,
-  },
-  fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      return cb(null, true);
-    }
+function resumeFileFilter(req, file, cb) {
+  if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    return cb(null, true);
+  }
 
-    const error = new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
-    error.status = 400;
-    error.code = 'UNSUPPORTED_FILE_TYPE';
-    return cb(error);
-  },
-});
+  const error = new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
+  error.status = 400;
+  error.code = 'UNSUPPORTED_FILE_TYPE';
+  return cb(error);
+}
 
-const uploadBatch = upload.array('resumes', 20);
+function createUploadMiddleware() {
+  return multer({
+    storage,
+    limits: {
+      fileSize: MAX_UPLOAD_MB * 1024 * 1024,
+      files: MAX_FILES_PER_UPLOAD,
+    },
+    fileFilter: resumeFileFilter,
+  });
+}
 
-module.exports = { upload, uploadBatch };
+const upload = createUploadMiddleware();
+const uploadBatch = createUploadMiddleware().array('resumes', MAX_FILES_PER_UPLOAD);
+
+module.exports = { upload, uploadBatch, resumeFileFilter };

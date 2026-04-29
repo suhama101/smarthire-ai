@@ -35,7 +35,7 @@ function getCandidateName(resumeData, file) {
 router.post('/analyze', uploadBatch, async (req, res, next) => {
   const userId = req.user?.id || DEFAULT_USER_ID;
   const files = Array.isArray(req.files) ? req.files : [];
-  const rawJobDescription = req.body?.job_description;
+  const rawJobDescription = req.body?.job_description ?? req.body?.jobDescription;
   const jobDescription = typeof rawJobDescription === 'string' ? rawJobDescription.trim() : '';
 
   if (!files.length) {
@@ -96,7 +96,10 @@ router.post('/analyze', uploadBatch, async (req, res, next) => {
         matchedSkills: candidate.matchedSkills,
       }));
 
-    return res.json(sortedCandidates);
+    return res.json({
+      message: 'Batch analysis completed successfully!',
+      rankedCandidates: sortedCandidates,
+    });
   } catch (err) {
     if (err?.status) {
       return res.status(err.status).json({ error: err.message });

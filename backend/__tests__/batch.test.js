@@ -32,15 +32,18 @@ describe('batch resume analysis', () => {
       });
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body).toHaveLength(2);
-    expect(response.body[0]).toMatchObject({
+    expect(response.body).toMatchObject({
+      message: 'Batch analysis completed successfully!',
+    });
+    expect(Array.isArray(response.body.rankedCandidates)).toBe(true);
+    expect(response.body.rankedCandidates).toHaveLength(2);
+    expect(response.body.rankedCandidates[0]).toMatchObject({
       rank: 1,
       name: 'Alice Johnson',
       score: 92,
       matchedSkills: ['React', 'Node.js'],
     });
-    expect(response.body[1]).toMatchObject({
+    expect(response.body.rankedCandidates[1]).toMatchObject({
       rank: 2,
       name: 'Bob Smith',
       score: 81,
