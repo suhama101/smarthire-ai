@@ -99,7 +99,12 @@ router.post('/match', async (req, res, next) => {
     const trimmedJobDescription = typeof jobDescription === 'string' ? jobDescription.trim() : '';
 
     if (!analysisId || !trimmedJobDescription) {
+      console.error('[analyze/match] missing analysisId or jobDescription', req.body);
       return res.status(400).json({ error: 'analysisId and jobDescription are required.' });
+    }
+
+    if (trimmedJobDescription.length < 20) {
+      return res.status(400).json({ error: 'Please enter a job description with at least 20 characters.' });
     }
 
     if (!isMeaningfulJobDescription(trimmedJobDescription)) {

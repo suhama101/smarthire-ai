@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import axios from 'axios';
-import { BarChart3, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { addAnalysisEntry } from '../../../lib/history-store';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../../lib/input-utils';
 
@@ -16,6 +16,15 @@ function scoreTone(score) {
   }
 
   return 'border-rose-200 bg-rose-50 text-rose-700';
+}
+
+function clearAnalysisState(setAnalysisId, setResumeData, setAnalysisError, setMatchError, setMatchResult, setLearningPlan) {
+  setAnalysisId('');
+  setResumeData(null);
+  setAnalysisError('');
+  setMatchError('');
+  setMatchResult(null);
+  setLearningPlan(null);
 }
 
 function downloadPdf(filename, content) {
@@ -91,6 +100,7 @@ export default function CandidateWorkbench() {
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeData, setResumeData] = useState(null);
+  const [analysisId, setAnalysisId] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [analysisError, setAnalysisError] = useState('');
@@ -111,14 +121,16 @@ export default function CandidateWorkbench() {
 
     setIsAnalyzing(true);
     setAnalysisError('');
+    setAnalysisId('');
     setMatchResult(null);
     setLearningPlan(null);
 
     try {
       const formData = new FormData();
       formData.append('resume', selectedFile);
-      const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
-      setResumeData(response.data.resumeData);
+      const response = await axios.post('/api/analyze/resume', formData, { timeout: 120000 });
+      setAnalysisId(response.data?.analysisId || '');
+      setResumeData(response.data?.resumeData || null);
     } catch (error) {
       setAnalysisError(getFriendlyApiError(error, 'Resume analysis failed.'));
     } finally {
@@ -127,8 +139,8 @@ export default function CandidateWorkbench() {
   }
 
   async function handleMatchJob() {
-    if (!resumeData) {
-      setMatchError('Analyze a resume first.');
+    if (!analysisId) {
+      setMatchError('Please analyze a resume first before matching a job.');
       return;
     }
 
@@ -145,15 +157,13 @@ export default function CandidateWorkbench() {
     setLearningPlan(null);
 
     try {
-      const resumeText = buildResumeText(resumeData);
-      const response = await axios.post('/api/job/match', {
-        candidateProfile: resumeData,
-        resumeText,
+      const response = await axios.post('/api/analyze/match', {
+        analysisId,
         jobTitle: nextJobTitle,
         jobDescription: nextJobDescription,
       }, { timeout: 120000 });
 
-      const nextResult = response.data;
+      const nextResult = response.data?.matchResult || null;
       setMatchResult(nextResult);
       addAnalysisEntry({
         date: new Date().toISOString(),
@@ -163,9 +173,9 @@ export default function CandidateWorkbench() {
         recommendation: nextResult?.recommendation || 'Review manually',
         fullResult: {
           resumeData,
-          resumeText,
           jobTitle: jobTitle.trim(),
           jobDescription: jobDescription.trim(),
+          analysisId,
           matchResult: nextResult,
         },
       });
@@ -218,8 +228,21 @@ export default function CandidateWorkbench() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-3xl border border-white/10 bg-[#0F0F13] p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#F1F1F3]"><Upload className="h-4 w-4 text-indigo-300" /> Resume Upload</div>
-          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md" className="mt-4 block w-full text-sm text-[#8B8B9E] file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-[#0F0F13]" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} />
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-semibold text-[#F1F1F3]">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4 text-indigo-300" /> Resume Upload
+            </div>
+            {analysisId ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Resume analyzed — ready to match
+              </span>
+            ) : null}
+          </div>
+            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md" className="mt-4 block w-full text-sm text-[#8B8B9E] file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-[#0F0F13]" onChange={(event) => {
+              setSelectedFile(event.target.files?.[0] || null);
+              clearAnalysisState(setAnalysisId, setResumeData, setAnalysisError, setMatchError, setMatchResult, setLearningPlan);
+            }} />
           {selectedFile ? <p className="mt-3 text-sm text-[#F1F1F3]">Selected: {selectedFile.name}</p> : <p className="mt-3 text-sm text-[#8B8B9E]">Choose a PDF, DOCX, TXT, or MD resume.</p>}
           {analysisError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{analysisError}</p> : null}
           <button type="button" onClick={handleAnalyzeResume} disabled={!selectedFile || isAnalyzing} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
