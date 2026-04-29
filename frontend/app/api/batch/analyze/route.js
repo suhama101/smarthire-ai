@@ -5,15 +5,14 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
+import { generateGeminiContent } from '../../../../src/lib/gemini-model';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 const JOB_SKILL_KEYWORDS = [
   'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
   'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
@@ -234,7 +233,7 @@ async function callGemini(jobTitle, companyName, jobDescription, fileBase64, fil
         },
       ];
 
-  const result = await model.generateContent(content);
+  const result = await generateGeminiContent(genAI, content);
   const text = String(result?.response?.text?.() || '').trim();
 
   if (!text) {

@@ -7,6 +7,7 @@ import Busboy from 'busboy';
 import { Readable } from 'node:stream';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
+import { generateGeminiContent } from '../../../../src/lib/gemini-model';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
@@ -14,9 +15,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
@@ -305,7 +304,7 @@ async function analyzeWithGemini(upload, resumeText) {
   }
 
   const prompt = buildGeminiPrompt(upload, resumeText);
-  const response = await model.generateContent(prompt);
+  const response = await generateGeminiContent(genAI, prompt);
 
   const text = extractGeminiText(response?.response || response);
 

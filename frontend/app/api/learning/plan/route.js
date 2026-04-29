@@ -5,15 +5,14 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
+import { generateGeminiContent } from '../../../../src/lib/gemini-model';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
 function dedupeStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
@@ -122,7 +121,7 @@ Job Title: ${String(jobTitle || '').trim()}
 Missing Skills: ${JSON.stringify(matchResult?.missingSkills || [])}
 Match Score: ${Number(matchResult?.matchScore || 0)}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await generateGeminiContent(genAI, prompt);
   const text = String(result?.response?.text?.() || '').trim();
 
   if (!text) {
