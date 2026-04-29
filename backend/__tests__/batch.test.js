@@ -51,6 +51,25 @@ describe('batch resume analysis', () => {
     });
   });
 
+  test('accepts the frontend single-file json payload', async () => {
+    const response = await request(app)
+      .post('/api/batch/analyze')
+      .send({
+        jobTitle: 'React Engineer',
+        jobDescription: 'Looking for a React engineer with Node.js experience',
+        fileName: 'alice.txt',
+        mimeType: 'text/plain',
+        fileBase64: Buffer.from('Alice resume content '.repeat(10)).toString('base64'),
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      candidateName: 'Alice Johnson',
+      matchScore: 92,
+      matchedSkills: ['React', 'Node.js'],
+    });
+  });
+
   test('rejects requests without files', async () => {
     const response = await request(app)
       .post('/api/batch/analyze')

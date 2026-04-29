@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { uploadBatch } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
@@ -32,9 +34,73 @@ function getCandidateName(resumeData, file) {
   return 'Unknown Candidate';
 }
 
-router.post('/analyze', uploadBatch, async (req, res, next) => {
+function parseJsonBodyFile(req) {
+  const fileBase64 = String(req.body?.fileBase64 || '').trim();
+  const fileName = String(req.body?.fileName || '').trim();
+  const mimeType = String(req.body?.mimeType || '').trim();
+
+  if (!fileBase64 || !fileName) {
+    return null;
+  }
+
+  const buffer = Buffer.from(fileBase64, 'base64');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smarthire-batch-'));
+  const filePath = path.join(tempDir, fileName);
+
+  fs.writeFileSync(filePath, buffer);
+
+  return {
+    fieldName: 'resume',
+    originalname: fileName,
+    mimetype: mimeType || 'application/octet-stream',
+    path: filePath,
+    isTempJsonUpload: true,
+  };
+}
+
+function runBatchUploadMiddleware(req, res) {
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
+
+  if (!contentType.includes('multipart/form-data')) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    uploadBatch(req, res, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+router.post('/analyze', async (req, res, next) => {
   const userId = req.user?.id || DEFAULT_USER_ID;
-  const files = Array.isArray(req.files) ? req.files : [];
+  const files = [];
+  const isJsonSingleFileRequest = !String(req.headers['content-type'] || '').toLowerCase().includes('multipart/form-data');
+
+  try {
+    await runBatchUploadMiddleware(req, res);
+  } catch (err) {
+    if (err?.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+
+    return next(err);
+  }
+
+  if (Array.isArray(req.files) && req.files.length) {
+    files.push(...req.files);
+  }
+
+  const jsonUpload = parseJsonBodyFile(req);
+  if (!files.length && jsonUpload) {
+    files.push(jsonUpload);
+  }
+
   const rawJobDescription = req.body?.job_description ?? req.body?.jobDescription;
   const jobDescription = typeof rawJobDescription === 'string' ? rawJobDescription.trim() : '';
 
@@ -84,6 +150,16 @@ router.post('/analyze', uploadBatch, async (req, res, next) => {
         });
       } finally {
         deleteFile(filePath);
+
+        if (file?.isTempJsonUpload) {
+          const tempDir = path.dirname(filePath);
+
+          try {
+            fs.rmdirSync(tempDir);
+          } catch {
+            // Best-effort cleanup only.
+          }
+        }
       }
     }
 
@@ -95,6 +171,14 @@ router.post('/analyze', uploadBatch, async (req, res, next) => {
         score: candidate.score,
         matchedSkills: candidate.matchedSkills,
       }));
+
+    if (isJsonSingleFileRequest && sortedCandidates.length === 1) {
+      return res.json({
+        candidateName: sortedCandidates[0].name,
+        matchScore: sortedCandidates[0].score,
+        matchedSkills: sortedCandidates[0].matchedSkills,
+      });
+    }
 
     return res.json({
       message: 'Batch analysis completed successfully!',
