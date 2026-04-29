@@ -107,7 +107,7 @@ function extractSkills(text) {
   return dedupeStrings(JOB_SKILL_KEYWORDS.filter((skill) => normalized.includes(skill)).map(normalizeKeywordLabel));
 }
 
-function buildFallbackMatch(candidateProfile, jobTitle, jobDescription, candidateIndex) {
+function buildFallbackMatchFromProfile(candidateProfile, jobTitle, jobDescription, candidateIndex) {
   const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
   const candidateSkills = extractSkills(`${JSON.stringify(profile)} ${String(profile.summary || '')}`);
   const jobSkills = extractSkills(`${jobTitle} ${jobDescription}`);
@@ -142,6 +142,44 @@ function buildFallbackMatch(candidateProfile, jobTitle, jobDescription, candidat
   );
 }
 
+function buildFallbackMatch(candidateProfile, resumeText, jobTitle, jobDescription, candidateIndex, fileName) {
+  const profile = candidateProfile && typeof candidateProfile === 'object' ? candidateProfile : {};
+  const resumeBody = String(resumeText || '').replace(/\s+/g, ' ').trim();
+  const candidateName = String(profile.name || profile.fullName || profile.candidateName || fileName || `Candidate ${candidateIndex || 1}`)
+    .replace(/\.[^.]+$/, '')
+    .trim() || `Candidate ${candidateIndex || 1}`;
+  const candidateSkills = extractSkills(`${resumeBody} ${fileName} ${JSON.stringify(profile)} ${String(profile.summary || '')}`);
+  const jobSkills = extractSkills(`${jobTitle} ${jobDescription}`);
+  const matchedSkills = candidateSkills.filter((skill) => jobSkills.some((jobSkill) => skill.toLowerCase() === jobSkill.toLowerCase() || skill.toLowerCase().includes(jobSkill.toLowerCase()) || jobSkill.toLowerCase().includes(skill.toLowerCase())));
+  const missingSkills = jobSkills.filter((skill) => !matchedSkills.some((matched) => matched.toLowerCase() === skill.toLowerCase()));
+  const overlapRatio = matchedSkills.length / Math.max(jobSkills.length || 1, 1);
+  const matchScore = Math.max(25, Math.min(95, Math.round(overlapRatio * 100)));
+
+  return normalizeBatchResult(
+    {
+      candidateName,
+      matchScore,
+      matchedSkills,
+      missingSkills,
+      experienceFit: matchScore >= 80 ? 'Strong' : matchScore >= 60 ? 'Moderate' : 'Weak',
+      recommendation: matchScore >= 80 ? 'Strongly Recommended' : matchScore >= 60 ? 'Recommended' : 'Needs Review',
+      profile: {
+        name: candidateName,
+        email: profile.email || '',
+        title: profile.title || jobTitle || '',
+        summary: resumeBody.slice(0, 280) || String(profile.summary || ''),
+        skills: candidateSkills,
+        matchedSkills,
+        missingSkills,
+        experience: Array.isArray(profile.experience) ? profile.experience : [],
+        education: Array.isArray(profile.education) ? profile.education : [],
+        yearsExperience: Number.isFinite(Number(profile.yearsExperience)) ? Number(profile.yearsExperience) : null,
+      },
+    },
+    { candidateIndex, profile: { ...profile, name: candidateName } }
+  );
+}
+
 async function extractResumeFromBase64(fileBase64, fileName, mimeType) {
   const buffer = Buffer.from(String(fileBase64 || ''), 'base64');
   const extension = String(fileName || '').toLowerCase().split('.').pop();
@@ -163,6 +201,38 @@ async function extractResumeFromBase64(fileBase64, fileName, mimeType) {
   }
 
   return { buffer, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
+}
+
+async function extractResumeFromUpload(upload, fallbackName = '') {
+  if (!upload) {
+    return { fileBase64: '', fileName: fallbackName, mimeType: '', text: '' };
+  }
+
+  if (typeof upload.arrayBuffer === 'function') {
+    const buffer = Buffer.from(await upload.arrayBuffer());
+    const fileName = String(upload.name || fallbackName || '').trim();
+    const mimeType = String(upload.type || '').trim();
+    const extension = fileName.toLowerCase().split('.').pop();
+
+    if (mimeType === 'application/pdf' || extension === 'pdf') {
+      return { buffer, fileBase64: buffer.toString('base64'), fileName, mimeType, text: '' };
+    }
+
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || extension === 'docx') {
+      try {
+        const mammothModule = await import('mammoth');
+        const mammoth = mammothModule.default || mammothModule;
+        const result = await mammoth.extractRawText({ buffer });
+        return { buffer, fileBase64: buffer.toString('base64'), fileName, mimeType, text: String(result?.value || '').replace(/\s+/g, ' ').trim() };
+      } catch {
+        return { buffer, fileBase64: buffer.toString('base64'), fileName, mimeType, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
+      }
+    }
+
+    return { buffer, fileBase64: buffer.toString('base64'), fileName, mimeType, text: buffer.toString('utf8').replace(/\s+/g, ' ').trim() };
+  }
+
+  return extractResumeFromBase64(upload.fileBase64 || '', upload.fileName || fallbackName, upload.mimeType || '');
 }
 
 function buildGeminiPrompt(jobTitle, companyName, jobDescription, candidateIndex) {
@@ -203,15 +273,10 @@ Rules:
 
 async function callGemini(jobTitle, companyName, jobDescription, fileBase64, fileName, mimeType, candidateIndex) {
   const resume = await extractResumeFromBase64(fileBase64, fileName, mimeType);
+  const fallbackResult = () => buildFallbackMatch({ summary: resume.text || '' }, resume.text || '', jobTitle, jobDescription, candidateIndex, fileName);
 
   if (!String(process.env.GEMINI_API_KEY || '').trim()) {
-    if (resume.text) {
-      return buildFallbackMatch({ summary: resume.text }, jobTitle, jobDescription, candidateIndex);
-    }
-
-    const error = new Error('GEMINI_API_KEY not set');
-    error.status = 500;
-    throw error;
+    return fallbackResult();
   }
 
   const isPdf = String(mimeType || '').toLowerCase() === 'application/pdf' || String(fileName || '').toLowerCase().endsWith('.pdf');
@@ -233,14 +298,18 @@ async function callGemini(jobTitle, companyName, jobDescription, fileBase64, fil
         },
       ];
 
-  const result = await generateGeminiContent(genAI, content);
-  const text = String(result?.response?.text?.() || '').trim();
+  try {
+    const result = await generateGeminiContent(genAI, content);
+    const text = String(result?.response?.text?.() || '').trim();
 
-  if (!text) {
-    throw new Error('Gemini returned an empty response.');
+    if (!text) {
+      return fallbackResult();
+    }
+
+    return normalizeBatchResult(parseJsonResponse(text), { candidateIndex });
+  } catch {
+    return fallbackResult();
   }
-
-  return normalizeBatchResult(parseJsonResponse(text), { candidateIndex });
 }
 
 export async function POST(request) {
@@ -251,14 +320,42 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds || 1) } });
     }
 
-    const body = await request.json();
-    const fileBase64 = String(body?.fileBase64 || '').trim();
-    const fileName = String(body?.fileName || '').trim();
-    const mimeType = String(body?.mimeType || '').trim();
-    const jobTitle = sanitizeText(body?.jobTitle);
-    const jobDescription = sanitizeText(body?.jobDescription);
-    const candidateIndex = Number(body?.candidateIndex || 1);
-    const companyName = sanitizeText(body?.companyName || 'Recruiter Batch');
+    const contentType = String(request.headers.get('content-type') || '').toLowerCase();
+    let fileBase64 = '';
+    let fileName = '';
+    let mimeType = '';
+    let jobTitle = '';
+    let jobDescription = '';
+    let candidateIndex = 1;
+    let companyName = 'Recruiter Batch';
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      const upload = formData.get('file') || formData.get('resume');
+
+      jobTitle = sanitizeText(formData.get('jobTitle'));
+      jobDescription = sanitizeText(formData.get('jobDescription'));
+      candidateIndex = Number(formData.get('candidateIndex') || 1);
+      companyName = sanitizeText(formData.get('companyName') || 'Recruiter Batch');
+
+      if (!upload || typeof upload.arrayBuffer !== 'function') {
+        return NextResponse.json({ error: 'fileBase64, fileName, jobTitle, and jobDescription are required.' }, { status: 400 });
+      }
+
+      const extracted = await extractResumeFromUpload(upload, upload?.name || 'resume');
+      fileBase64 = extracted.fileBase64;
+      fileName = extracted.fileName;
+      mimeType = extracted.mimeType;
+    } else {
+      const body = await request.json();
+      fileBase64 = String(body?.fileBase64 || '').trim();
+      fileName = String(body?.fileName || '').trim();
+      mimeType = String(body?.mimeType || '').trim();
+      jobTitle = sanitizeText(body?.jobTitle);
+      jobDescription = sanitizeText(body?.jobDescription);
+      candidateIndex = Number(body?.candidateIndex || 1);
+      companyName = sanitizeText(body?.companyName || 'Recruiter Batch');
+    }
 
     if (!jobTitle || !jobDescription || !fileBase64 || !fileName) {
       return NextResponse.json({ error: 'fileBase64, fileName, jobTitle, and jobDescription are required.' }, { status: 400 });

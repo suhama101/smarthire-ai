@@ -24,21 +24,6 @@ const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt,.md';
 const MAX_FILES = 20;
 const PROCESS_DELAY_MS = 250;
 
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const commaIndex = result.indexOf(',');
-      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-    };
-
-    reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -461,22 +446,16 @@ export default function BatchResumeUploadPage() {
       setProgress({ current: index + 1, total: workingFiles.length, label: `Processing ${index + 1} of ${workingFiles.length} resumes...` });
 
       try {
-        const fileBase64 = await readFileAsBase64(fileEntry.file);
+        const formData = new FormData();
+        formData.append('file', fileEntry.file);
+        formData.append('jobTitle', sanitizeText(savedJob.jobTitle));
+        formData.append('companyName', sanitizeText(savedJob.companyName));
+        formData.append('jobDescription', sanitizeText(savedJob.jobDescription));
+        formData.append('candidateIndex', String(index + 1));
 
         const response = await fetch('/api/batch/analyze', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileBase64,
-            fileName: fileEntry.file.name,
-            mimeType: fileEntry.file.type,
-            jobTitle: sanitizeText(savedJob.jobTitle),
-            companyName: sanitizeText(savedJob.companyName),
-            jobDescription: sanitizeText(savedJob.jobDescription),
-            candidateIndex: index + 1,
-          }),
+          body: formData,
         });
 
         const responseData = await response.json().catch(() => ({}));

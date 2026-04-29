@@ -32,8 +32,9 @@ describe('BatchResumeUploadPage', () => {
     };
 
     global.fetch = jest.fn().mockImplementation(async (_url, options) => {
-      const body = JSON.parse(options.body);
-      const response = body.fileName.includes('ava')
+      const body = options.body;
+      const fileEntry = body.get('file');
+      const response = String(fileEntry?.name || '').includes('ava')
         ? {
             candidateName: 'Ava Chen',
             matchScore: 96,
@@ -95,8 +96,10 @@ describe('BatchResumeUploadPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(2);
-      expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ fileName: 'ava-chen.pdf', jobTitle: 'Senior Frontend Engineer' });
-      expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({ fileName: 'noah-patel.docx', jobTitle: 'Senior Frontend Engineer' });
+      expect(fetch.mock.calls[0][1].body.get('file').name).toBe('ava-chen.pdf');
+      expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
+      expect(fetch.mock.calls[1][1].body.get('file').name).toBe('noah-patel.docx');
+      expect(fetch.mock.calls[1][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);
