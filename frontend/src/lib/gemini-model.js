@@ -1,5 +1,5 @@
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const FALLBACK_GEMINI_MODELS = [DEFAULT_GEMINI_MODEL, 'gemini-2.0-flash'];
+const FALLBACK_GEMINI_MODELS = [DEFAULT_GEMINI_MODEL];
 
 function uniqueStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
