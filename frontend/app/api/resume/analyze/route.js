@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
 import { Readable } from 'node:stream';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { generateGeminiContent } from '../../../../src/lib/gemini-model';
@@ -33,11 +33,18 @@ function getFileExtension(fileName = '') {
 }
 
 async function extractPdfText(buffer) {
+  let parser = null;
+
   try {
-    const pdfData = await pdfParse(buffer);
+    parser = new PDFParse({ data: buffer });
+    const pdfData = await parser.getText();
     return String(pdfData?.text || '').replace(/\s+/g, ' ').trim();
   } catch {
     return '';
+  } finally {
+    if (parser && typeof parser.destroy === 'function') {
+      await parser.destroy();
+    }
   }
 }
 
