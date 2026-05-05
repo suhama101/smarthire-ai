@@ -17,13 +17,6 @@ export const maxDuration = 60;
 
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-  generationConfig: {
-    maxOutputTokens: 1500,
-    temperature: 0.1,
-  },
-});
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
@@ -127,7 +120,7 @@ async function extractTextFromUpload(upload) {
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
 }
 
-async function convertToMarkdown(rawText, activeModel = model) {
+async function convertToMarkdown(rawText) {
   const normalizedText = String(rawText || '').trim();
 
   if (process.env.NODE_ENV === 'test' || !String(process.env.GEMINI_API_KEY || '').trim()) {
@@ -144,7 +137,7 @@ Return ONLY the markdown text, nothing else.
 RESUME TEXT:
 ${normalizedText.substring(0, 4000)}`;
 
-  const result = await activeModel.generateContent(mdPrompt);
+  const result = await generateGeminiContent(genAI, mdPrompt);
   return String(result?.response?.text?.() || '').trim() || normalizedText;
 }
 
@@ -646,7 +639,7 @@ JSON:
     }
   }
 
-  const result = await model.generateContent(buildAnalysisPrompt(localResumeText));
+  const result = await generateGeminiContent(genAI, buildAnalysisPrompt(localResumeText));
   const rawResponse = extractGeminiText(result?.response || result);
   const cleanedJson = cleanGeminiJsonResponse(rawResponse);
 
@@ -706,7 +699,7 @@ export async function POST(request) {
       );
     }
 
-    const markdownResume = await convertToMarkdown(extractedText, model);
+    const markdownResume = await convertToMarkdown(extractedText);
     const analysis = await analyzeWithGemini(markdownResume);
     const resumeData = mapAnalysisToResumeData(analysis);
 
