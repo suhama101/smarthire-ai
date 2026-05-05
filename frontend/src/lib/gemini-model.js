@@ -11,6 +11,13 @@ function looksLikeMissingModelError(error) {
   return /404 Not Found|not found for API version|not supported for generateContent|model .* not found/i.test(message);
 }
 
+function looksLikeTransientAvailabilityError(error) {
+  const message = String(error?.message || '');
+  const status = Number(error?.status || error?.response?.status || 0);
+
+  return status === 503 || /503 Service Unavailable|high demand|temporarily unavailable|try again later/i.test(message);
+}
+
 export function getGeminiModelCandidates() {
   const configuredModel = String(process.env.GEMINI_MODEL || '').trim();
   const candidates = configuredModel && FALLBACK_GEMINI_MODELS.includes(configuredModel)
@@ -31,7 +38,9 @@ export async function generateGeminiContent(genAI, prompt) {
     } catch (error) {
       lastError = error;
 
-      if (!looksLikeMissingModelError(error) || modelName === candidates[candidates.length - 1]) {
+      const shouldRetry = looksLikeMissingModelError(error) || looksLikeTransientAvailabilityError(error);
+
+      if (!shouldRetry || modelName === candidates[candidates.length - 1]) {
         throw error;
       }
     }
