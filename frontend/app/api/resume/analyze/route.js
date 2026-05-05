@@ -317,6 +317,16 @@ function mapAnalysisToResumeData(analysis) {
   };
 }
 
+function errorResponse(message, status, headers) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: String(message || 'Server error. Please try again.'),
+    },
+    { status, ...(headers ? { headers } : {}) }
+  );
+}
+
 function parseMultipartRequest(request) {
   return new Promise((resolve, reject) => {
     const headers = Object.fromEntries(request.headers.entries());
@@ -627,23 +637,23 @@ export async function POST(request) {
     const rateLimit = checkRateLimit(request, 'resume-analyze');
 
     if (rateLimit.limited) {
-      return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds || 1) } });
+      return errorResponse('Too many requests. Please wait a moment.', 429, { 'Retry-After': String(rateLimit.retryAfterSeconds || 1) });
     }
 
     const contentType = request.headers.get('content-type') || '';
 
     if (!contentType.includes('multipart/form-data')) {
-      return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
+      return errorResponse('Please upload a resume file.', 400);
     }
 
     const { fields, fileUpload, fileTooLarge } = await parseMultipartRequest(request);
 
     if (fileTooLarge) {
-      return NextResponse.json({ error: 'File too large. Max 4MB.' }, { status: 413 });
+      return errorResponse('File too large. Max 4MB.', 413);
     }
 
     if (!fileUpload?.buffer?.length) {
-      return NextResponse.json({ error: 'Please upload a resume file.' }, { status: 400 });
+      return errorResponse('Please upload a resume file.', 400);
     }
 
     const clientResumeText = sanitizeText(String(fields?.resumeText || ''));
@@ -654,7 +664,7 @@ export async function POST(request) {
     const isPdfUpload = extension === '.pdf' || String(fileUpload.mimeType || '').toLowerCase() === 'application/pdf';
 
     if (!allowedExtensions.has(extension)) {
-      return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
+      return errorResponse('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.', 415);
     }
 
     const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
@@ -662,13 +672,11 @@ export async function POST(request) {
     console.log('=== EXTRACTED TEXT SAMPLE:', extractedText.substring(0, 800));
 
     if (!extractedText || extractedText.trim().length < 50) {
-      return NextResponse.json(
-        {
-          error: isPdfUpload
-            ? 'Could not extract text from PDF. Please try a text-based PDF.'
-            : 'Analysis failed. Please try again.',
-        },
-        { status: 400 }
+      return errorResponse(
+        isPdfUpload
+          ? 'Could not extract text from PDF. Please try a text-based PDF.'
+          : 'Analysis failed. Please try again.',
+        400
       );
     }
 
@@ -690,9 +698,6 @@ export async function POST(request) {
   } catch (error) {
     const message = error?.message || 'Analysis failed. Please try again.';
     const status = Number(error?.status) || 500;
-    const isAuthIssue = /GEMINI_API_KEY|api key/i.test(message);
-    const isTooLarge = /too large|file size/i.test(message) || status === 413;
-    const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
 
     console.error('[resume/analyze] Request failed', {
       message,
@@ -700,17 +705,6 @@ export async function POST(request) {
       stack: error?.stack,
     });
 
-    return NextResponse.json(
-      {
-        error: isTooLarge
-            ? 'File too large. Max 4MB.'
-          : isTemporary
-            ? message
-            : isAuthIssue
-              ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
-              : message,
-      },
-      { status: status >= 400 ? status : 500 }
-    );
+    return errorResponse(message, status >= 400 ? status : 500);
   }
 }

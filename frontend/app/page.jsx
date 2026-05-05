@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import axios from 'axios';
 import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, FileUp, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
-import { getFriendlyApiError, validateResumeFile } from '../src/lib/input-utils';
+import { validateResumeFile } from '../src/lib/input-utils';
 import ResumeAnalysisSections from '../src/components/analysis/ResumeAnalysisSections';
 
 const FEATURE_CARDS = [
@@ -53,6 +52,18 @@ const TRUST_POINTS = [
   'Candidate screening in one session',
   'Vercel-ready API routes',
 ];
+
+function normalizeErrorMessage(error, fallbackMessage = 'Something went wrong. Please try again.') {
+  if (typeof error === 'string') {
+    return error || fallbackMessage;
+  }
+
+  if (error && typeof error === 'object') {
+    return error.message || error.error || fallbackMessage;
+  }
+
+  return fallbackMessage;
+}
 
 export default function LandingPage() {
   const resumeInputRef = useRef(null);
@@ -128,7 +139,7 @@ export default function LandingPage() {
     const validation = validateResumeFile(selectedResume);
 
     if (!validation.valid) {
-      setResumeError(validation.message);
+      setResumeError(normalizeErrorMessage(validation.message, 'Resume analysis failed.'));
       return;
     }
 
@@ -141,11 +152,23 @@ export default function LandingPage() {
       const formData = new FormData();
       formData.append('resume', selectedResume);
 
-      const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
-      setResumeAnalysis(response.data?.analysis || response.data?.resumeData || null);
-      setResumeText(response.data?.resumeText || '');
+      const response = await fetch('/api/resume/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setResumeError(normalizeErrorMessage(data.error, 'Analysis failed. Please try again.'));
+        return;
+      }
+
+      setResumeAnalysis(data.analysis || data.resumeData || null);
+      setResumeText(data.resumeText || '');
+      setResumeError('');
     } catch (error) {
-      setResumeError(getFriendlyApiError(error, 'Resume analysis failed.'));
+      setResumeError('Network error. Please check your connection.');
     } finally {
       setIsAnalyzingResume(false);
     }
@@ -294,7 +317,11 @@ export default function LandingPage() {
                 <p className="mt-1 text-sm text-[#8B8B9E]">{selectedResume ? selectedResume.name : 'No file selected yet.'}</p>
               </div>
 
-              {resumeError ? <p className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{resumeError}</p> : null}
+              {resumeError ? (
+                <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                  {typeof resumeError === 'string' ? resumeError : JSON.stringify(resumeError)}
+                </div>
+              ) : null}
 
               <button
                 type="button"
