@@ -22,6 +22,29 @@ const model = genAI.getGenerativeModel({
   generationConfig: {
     maxOutputTokens: 1500,
     temperature: 0.1,
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'object',
+      properties: {
+        candidateName: { type: 'string' },
+        email: { type: 'string' },
+        phone: { type: 'string' },
+        profileSummary: { type: 'string' },
+        experienceLevel: { type: 'string' },
+        totalExperience: { type: 'string' },
+        technicalSkills: { type: 'array', items: { type: 'string' } },
+        softSkills: { type: 'array', items: { type: 'string' } },
+        workExperience: { type: 'array' },
+        education: { type: 'array' },
+        projects: { type: 'array' },
+        certifications: { type: 'array', items: { type: 'string' } },
+        languages: { type: 'array', items: { type: 'string' } },
+        strengths: { type: 'array', items: { type: 'string' } },
+        areasToImprove: { type: 'array', items: { type: 'string' } },
+        overallScore: { type: 'number' },
+        hiringRecommendation: { type: 'string' },
+      },
+    },
   },
 });
 
