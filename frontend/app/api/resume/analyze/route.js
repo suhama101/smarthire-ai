@@ -43,7 +43,11 @@ async function extractPdfText(buffer) {
     return '';
   } finally {
     if (parser && typeof parser.destroy === 'function') {
-      await parser.destroy();
+      try {
+        await parser.destroy();
+      } catch {
+        // Ignore cleanup failures so a parsed resume still returns a response.
+      }
     }
   }
 }
