@@ -3,14 +3,35 @@ import { generateGeminiContent } from '../src/lib/gemini-model';
 import { checkRateLimit } from '../src/lib/rate-limit';
 import { POST } from '../app/api/resume/analyze/route';
 
-const pdfTextMock = jest.fn();
+const getRawTextContentMock = jest.fn();
+const parserDestroyMock = jest.fn();
+const parseBufferMock = jest.fn();
+let pdfParserReadyHandler = null;
+let pdfParserErrorHandler = null;
 
-jest.mock('pdf-parse', () => ({
-  PDFParse: jest.fn().mockImplementation(() => ({
-    getText: pdfTextMock,
-    destroy: jest.fn(),
-  })),
-}));
+jest.mock('pdf2json', () =>
+  jest.fn().mockImplementation(() => ({
+    on: jest.fn((eventName, handler) => {
+      if (eventName === 'pdfParser_dataReady') {
+        pdfParserReadyHandler = handler;
+      }
+
+      if (eventName === 'pdfParser_dataError') {
+        pdfParserErrorHandler = handler;
+      }
+    }),
+    parseBuffer: parseBufferMock.mockImplementation((buffer) => {
+      if (String(buffer || '').includes('empty content')) {
+        pdfParserErrorHandler?.({ parserError: 'parse failure' });
+        return;
+      }
+
+      pdfParserReadyHandler?.();
+    }),
+    getRawTextContent: getRawTextContentMock,
+    destroy: parserDestroyMock,
+  }))
+);
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -32,9 +53,11 @@ jest.mock('../src/lib/rate-limit', () => ({
 describe('resume analyze route', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    pdfParserReadyHandler = null;
+    pdfParserErrorHandler = null;
     process.env.GEMINI_API_KEY = 'test-key';
     checkRateLimit.mockReturnValue({ limited: false });
-    pdfTextMock.mockResolvedValue({ text: 'Senior frontend engineer with React and TypeScript experience.' });
+    getRawTextContentMock.mockReturnValue('Senior frontend engineer with React and TypeScript experience.');
     generateGeminiContent.mockResolvedValue({
       response: {
         text: () => JSON.stringify({
@@ -78,7 +101,7 @@ describe('resume analyze route', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(pdfTextMock).toHaveBeenCalledTimes(1);
+    expect(parseBufferMock).toHaveBeenCalledTimes(1);
     expect(generateGeminiContent).toHaveBeenCalledTimes(1);
     expect(String(generateGeminiContent.mock.calls[0][1][0])).toContain('Senior frontend engineer with React and TypeScript experience.');
     expect(payload.resumeText).toBe('Senior frontend engineer with React and TypeScript experience.');
@@ -86,12 +109,12 @@ describe('resume analyze route', () => {
   });
 
   test('returns an error when a PDF has no extractable text', async () => {
-    pdfTextMock.mockResolvedValue({ text: '' });
+    getRawTextContentMock.mockReturnValue('');
 
     const response = await POST(createPdfRequest('%PDF-1.4 empty content'));
     const payload = await response.json();
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(400);
     expect(payload.error).toBe('Could not extract text from PDF. Please try a text-based PDF.');
     expect(generateGeminiContent).not.toHaveBeenCalled();
   });

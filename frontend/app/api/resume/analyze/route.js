@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
 import { Readable } from 'node:stream';
-import { PDFParse } from 'pdf-parse';
+import PDFParser from 'pdf2json';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { generateGeminiContent } from '../../../../src/lib/gemini-model';
@@ -33,23 +33,21 @@ function getFileExtension(fileName = '') {
 }
 
 async function extractPdfText(buffer) {
-  let parser = null;
+  return new Promise((resolve, reject) => {
+    const pdfParser = new PDFParser(null, 1);
 
-  try {
-    parser = new PDFParse({ data: buffer });
-    const pdfData = await parser.getText();
-    return String(pdfData?.text || '').replace(/\s+/g, ' ').trim();
-  } catch {
-    return '';
-  } finally {
-    if (parser && typeof parser.destroy === 'function') {
-      try {
-        await parser.destroy();
-      } catch {
-        // Ignore cleanup failures so a parsed resume still returns a response.
-      }
-    }
-  }
+    pdfParser.on('pdfParser_dataError', (errData) => {
+      console.error('[resume/analyze] PDF parse failed', errData?.parserError || errData);
+      resolve('');
+    });
+
+    pdfParser.on('pdfParser_dataReady', () => {
+      const text = pdfParser.getRawTextContent();
+      resolve(String(text || '').replace(/\s+/g, ' ').trim());
+    });
+
+    pdfParser.parseBuffer(buffer);
+  });
 }
 
 async function extractDocxText(buffer) {
@@ -341,14 +339,14 @@ export async function POST(request) {
 
     const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
 
-    if (!extractedText) {
+    if (!extractedText || extractedText.trim().length < 50) {
       return NextResponse.json(
         {
           error: isPdfUpload
             ? 'Could not extract text from PDF. Please try a text-based PDF.'
             : 'Analysis failed. Please try again.',
         },
-        { status: 422 }
+        { status: 400 }
       );
     }
 
