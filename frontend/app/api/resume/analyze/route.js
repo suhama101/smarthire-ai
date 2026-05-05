@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
 import { Readable } from 'node:stream';
+import pdfParse from 'pdf-parse';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
 import { generateGeminiContent } from '../../../../src/lib/gemini-model';
@@ -33,27 +34,8 @@ function getFileExtension(fileName = '') {
 
 async function extractPdfText(buffer) {
   try {
-    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const pdfjs = pdfjsModule.default || pdfjsModule;
-    const document = await pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false }).promise;
-    const pageTexts = [];
-
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item) => (typeof item.str === 'string' ? item.str : ''))
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      if (pageText) {
-        pageTexts.push(pageText);
-      }
-    }
-
-    await document.destroy();
-    return pageTexts.join(' ').replace(/\s+/g, ' ').trim();
+    const pdfData = await pdfParse(buffer);
+    return String(pdfData?.text || '').replace(/\s+/g, ' ').trim();
   } catch {
     return '';
   }
@@ -93,34 +75,13 @@ async function extractTextFromUpload(upload) {
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
 }
 
-function buildGeminiPrompt(upload, resumeText) {
-  const extension = getFileExtension(upload?.filename || '');
-  const mimeType = String(upload?.mimeType || '').toLowerCase();
-  const buffer = Buffer.isBuffer(upload?.buffer) ? upload.buffer : Buffer.from(upload?.buffer || []);
+function buildGeminiPrompt(resumeText) {
   const normalizedResumeText = String(resumeText || '').trim();
 
   const basePrompt = 'Extract structured profile data from this resume. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration, description}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.';
 
-  if (mimeType === 'application/pdf' || extension === '.pdf') {
-    if (normalizedResumeText) {
-      return [
-        `${basePrompt}\n\nResume text:\n${normalizedResumeText.slice(0, 24000)}`,
-      ];
-    }
-
-    return [
-      {
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: buffer.toString('base64'),
-        },
-      },
-      basePrompt,
-    ];
-  }
-
   return [
-    `${basePrompt}\n\nResume text:\n${String(resumeText || '').slice(0, 24000)}`,
+    `${basePrompt}\n\nResume text:\n${normalizedResumeText}`,
   ];
 }
 
@@ -289,7 +250,7 @@ function extractGeminiText(response) {
   return String(response?.text?.() || response?.response?.text?.() || '').trim();
 }
 
-async function analyzeWithGemini(upload, resumeText) {
+async function analyzeWithGemini(resumeText) {
   const localResumeText = String(resumeText || '').trim();
 
   if (!String(process.env.GEMINI_API_KEY || '').trim()) {
@@ -303,7 +264,7 @@ async function analyzeWithGemini(upload, resumeText) {
     throw error;
   }
 
-  const prompt = buildGeminiPrompt(upload, resumeText);
+  const prompt = buildGeminiPrompt(resumeText);
   const response = await generateGeminiContent(genAI, prompt);
 
   const text = extractGeminiText(response?.response || response);
@@ -367,32 +328,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or MD.' }, { status: 415 });
     }
 
-    const extractedText = clientResumeText || sanitizeText(await extractTextFromUpload(fileUpload));
+    const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
 
-    if (!extractedText && !isPdfUpload) {
+    if (!extractedText) {
       return NextResponse.json(
         {
-          error: 'Analysis failed. Please try again.',
+          error: isPdfUpload
+            ? 'Could not extract text from PDF. Please try a text-based PDF.'
+            : 'Analysis failed. Please try again.',
         },
         { status: 422 }
       );
     }
 
-    if (isPdfUpload && !extractedText) {
-      const resumeData = await analyzeWithGemini(fileUpload, '');
-
-      return NextResponse.json(
-        {
-          status: 'ok',
-          timestamp: new Date().toISOString(),
-          version: '1.0.0',
-          resumeData,
-        },
-        { status: 200 }
-      );
-    }
-
-    const resumeData = await analyzeWithGemini(fileUpload, extractedText);
+    const resumeData = await analyzeWithGemini(extractedText);
 
     return NextResponse.json(
       {
@@ -400,6 +349,7 @@ export async function POST(request) {
         timestamp: new Date().toISOString(),
         version: '1.0.0',
         resumeData,
+        resumeText: extractedText,
       },
       { status: 200 }
     );

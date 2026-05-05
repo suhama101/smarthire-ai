@@ -18,9 +18,10 @@ function scoreTone(score) {
   return 'border-rose-200 bg-rose-50 text-rose-700';
 }
 
-function clearAnalysisState(setAnalysisId, setResumeData, setAnalysisError, setMatchError, setMatchResult, setLearningPlan) {
+function clearAnalysisState(setAnalysisId, setResumeData, setResumeText, setAnalysisError, setMatchError, setMatchResult, setLearningPlan) {
   setAnalysisId('');
   setResumeData(null);
+  setResumeText('');
   setAnalysisError('');
   setMatchError('');
   setMatchResult(null);
@@ -100,6 +101,7 @@ export default function CandidateWorkbench() {
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeData, setResumeData] = useState(null);
+  const [resumeText, setResumeText] = useState('');
   const [analysisId, setAnalysisId] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -122,6 +124,7 @@ export default function CandidateWorkbench() {
     setIsAnalyzing(true);
     setAnalysisError('');
     setAnalysisId('');
+    setResumeText('');
     setMatchResult(null);
     setLearningPlan(null);
 
@@ -131,6 +134,7 @@ export default function CandidateWorkbench() {
       const response = await axios.post('/api/analyze/resume', formData, { timeout: 120000 });
       setAnalysisId(response.data?.analysisId || '');
       setResumeData(response.data?.resumeData || null);
+      setResumeText(response.data?.resumeText || '');
     } catch (error) {
       setAnalysisError(getFriendlyApiError(error, 'Resume analysis failed.'));
     } finally {
@@ -161,6 +165,7 @@ export default function CandidateWorkbench() {
         analysisId,
         jobTitle: nextJobTitle,
         jobDescription: nextJobDescription,
+        resumeText,
       }, { timeout: 120000 });
 
       const nextResult = response.data?.matchResult || null;
@@ -173,6 +178,7 @@ export default function CandidateWorkbench() {
         recommendation: nextResult?.recommendation || 'Review manually',
         fullResult: {
           resumeData,
+          resumeText,
           jobTitle: jobTitle.trim(),
           jobDescription: jobDescription.trim(),
           analysisId,
@@ -241,7 +247,7 @@ export default function CandidateWorkbench() {
           </div>
             <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md" className="mt-4 block w-full text-sm text-[#8B8B9E] file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-[#0F0F13]" onChange={(event) => {
               setSelectedFile(event.target.files?.[0] || null);
-              clearAnalysisState(setAnalysisId, setResumeData, setAnalysisError, setMatchError, setMatchResult, setLearningPlan);
+              clearAnalysisState(setAnalysisId, setResumeData, setResumeText, setAnalysisError, setMatchError, setMatchResult, setLearningPlan);
             }} />
           {selectedFile ? <p className="mt-3 text-sm text-[#F1F1F3]">Selected: {selectedFile.name}</p> : <p className="mt-3 text-sm text-[#8B8B9E]">Choose a PDF, DOCX, TXT, or MD resume.</p>}
           {analysisError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{analysisError}</p> : null}

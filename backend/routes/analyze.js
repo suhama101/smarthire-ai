@@ -72,6 +72,7 @@ router.post('/resume', upload.single('resume'), async (req, res, next) => {
       message: 'Resume analyzed successfully!',
       analysisId: analysis.id,
       resumeData,
+      resumeText: analysis.raw_text || cleanedText,
       createdAt: analysis.created_at,
       dataSource: isAnthropicConfigured() ? 'claude' : 'fallback',
     });

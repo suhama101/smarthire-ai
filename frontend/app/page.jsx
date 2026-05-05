@@ -59,6 +59,7 @@ export default function LandingPage() {
   const [healthState, setHealthState] = useState({ status: 'checking', label: 'Checking API...' });
   const [selectedResume, setSelectedResume] = useState(null);
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
+  const [resumeText, setResumeText] = useState('');
   const [resumeError, setResumeError] = useState('');
   const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
 
@@ -104,6 +105,7 @@ export default function LandingPage() {
 
     setResumeError('');
     setResumeAnalysis(null);
+    setResumeText('');
 
     if (!file) {
       setSelectedResume(null);
@@ -132,6 +134,7 @@ export default function LandingPage() {
     setIsAnalyzingResume(true);
     setResumeError('');
     setResumeAnalysis(null);
+    setResumeText('');
 
     try {
       const formData = new FormData();
@@ -139,6 +142,7 @@ export default function LandingPage() {
 
       const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
       setResumeAnalysis(response.data?.resumeData || null);
+      setResumeText(response.data?.resumeText || '');
     } catch (error) {
       setResumeError(getFriendlyApiError(error, 'Resume analysis failed.'));
     } finally {
