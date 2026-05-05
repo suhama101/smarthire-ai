@@ -87,7 +87,86 @@ async function extractTextFromUpload(upload) {
 function buildGeminiPrompt(resumeText) {
   const normalizedResumeText = String(resumeText || '').trim();
 
-  const basePrompt = 'Analyze this resume in structured chunks. Return ONLY valid JSON with these exact keys: candidateName, email, phone, experienceLevel, totalExperience, profileSummary, technicalSkills, softSkills, languages, frameworks, databases, tools, workExperience, education, projects, strengths, areasToImprove, overallScore, hiringRecommendation. Use strings for candidateName, email, phone, experienceLevel, totalExperience, profileSummary, hiringRecommendation. Use arrays for technicalSkills, softSkills, languages, frameworks, databases, tools, strengths, areasToImprove. Each workExperience item must include title, company, duration, highlights. Each education item must include degree, institution, year. Each project item must include name, description, technologies. overallScore must be a number from 0 to 100. Return only valid JSON and no markdown.';
+  const basePrompt = `You are an expert resume parser.
+Extract ALL information from this resume text carefully.
+Return ONLY raw JSON - no markdown, no backticks.
+
+RESUME TEXT:
+${normalizedResumeText}
+
+IMPORTANT RULES:
+- candidateName: Look for name at the very TOP of the resume
+  (first line is almost always the name)
+- profileSummary: Look for sections labeled "PROFESSIONAL
+  SUMMARY", "SUMMARY", "ABOUT" - copy the text from there
+- workExperience: Look for "WORK EXPERIENCE", "EXPERIENCE",
+  "EMPLOYMENT" sections - extract ALL jobs listed
+- projects: Look for "PROJECTS", "KEY PROJECTS", "INDEPENDENT
+  PROJECTS" sections - extract ALL projects
+- experienceLevel: Judge based on years of experience and
+  roles - NOT just job titles:
+  * Fresher = no experience
+  * Junior = <2 years or internship only
+  * Mid-level = 2-4 years or strong internship + projects
+  * Senior = 4+ years
+  * Lead = team leadership roles
+- overallScore: Score out of 100 based on:
+  * Has professional summary (10pts)
+  * Has work experience (20pts)
+  * Has projects (20pts)
+  * Skills variety (20pts)
+  * Education quality (15pts)
+  * Has research/publications (15pts)
+
+Return this exact JSON:
+{
+  "candidateName": "name from top of resume",
+  "email": "email address",
+  "phone": "phone number",
+  "profileSummary": "text from professional summary section",
+  "experienceLevel": "Junior or Mid-level etc",
+  "totalExperience": "estimate e.g. 1 year internship",
+  "technicalSkills": ["skill1", "skill2"],
+  "softSkills": ["Communication", "Teamwork"],
+  "workExperience": [
+    {
+      "company": "company name",
+      "role": "job title",
+      "duration": "date range",
+      "highlights": ["bullet point 1", "bullet point 2"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "degree name",
+      "institution": "university name",
+      "year": "year"
+    }
+  ],
+  "projects": [
+    {
+      "name": "project name",
+      "description": "what it does",
+      "techStack": ["tech1", "tech2"]
+    }
+  ],
+  "certifications": [],
+  "languages": ["English", "Urdu"],
+  "strengths": [
+    "Production experience with government clients",
+    "Full-stack + AI/ML skills",
+    "Research publications"
+  ],
+  "areasToImprove": [
+    "Add more quantified achievements",
+    "Include certifications"
+  ],
+  "overallScore": 78,
+  "hiringRecommendation": "Hire"
+}
+
+Parse the resume carefully - do not leave any field empty
+if the information exists in the resume text.`;
 
   return [
     `${basePrompt}\n\nResume text:\n${normalizedResumeText}`,
