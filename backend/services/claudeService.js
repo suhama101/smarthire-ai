@@ -481,32 +481,66 @@ function buildFallbackLearningPlan(missingSkills, targetRole, yearsExperience) {
 
 function normalizeResumeData(raw) {
   const data = raw && typeof raw === 'object' ? raw : {};
-  const technicalSkills = toArray(data.technicalSkills);
+  const technicalSkills = toArray(data.technicalSkills || data.skills);
   const frameworks = toArray(data.frameworks);
   const languages = toArray(data.languages);
   const databases = toArray(data.databases);
   const tools = toArray(data.tools);
+  const workExperience = Array.isArray(data.workExperience || data.experience)
+    ? (data.workExperience || data.experience).map((item) => ({
+        title: String(item?.title || item?.role || item?.position || '').trim(),
+        company: String(item?.company || item?.organization || item?.employer || '').trim(),
+        duration: String(item?.duration || item?.period || item?.range || '').trim(),
+        description: String(Array.isArray(item?.highlights) ? item.highlights.join(' ') : item?.description || '').trim(),
+      }))
+    : [];
+  const education = Array.isArray(data.education)
+    ? data.education.map((item) => ({
+        degree: String(item?.degree || item?.qualification || item?.program || '').trim(),
+        institution: String(item?.institution || item?.school || item?.university || '').trim(),
+        year: item?.year ? String(item.year).trim() : '',
+      }))
+    : [];
+  const projects = Array.isArray(data.projects)
+    ? data.projects.map((item) => ({
+        name: String(item?.name || item?.title || item?.projectName || '').trim(),
+        description: String(item?.description || item?.summary || item?.details || '').trim(),
+        technologies: toArray(item?.technologies || item?.techStack || item?.tools),
+      }))
+    : [];
+  const yearsExperience = toNumber(data.yearsExperience ?? data.totalExperience, 0);
 
   const mergedSkills = Array.from(
     new Set([...technicalSkills, ...frameworks, ...languages, ...databases, ...tools])
   );
 
   return {
-    name: typeof data.name === 'string' ? data.name : 'Unknown',
+    candidateName: typeof data.candidateName === 'string' ? data.candidateName : typeof data.name === 'string' ? data.name : 'Unknown',
+    name: typeof data.name === 'string' ? data.name : typeof data.candidateName === 'string' ? data.candidateName : 'Unknown',
     email: typeof data.email === 'string' ? data.email : null,
+    phone: typeof data.phone === 'string' ? data.phone : null,
     title: typeof data.title === 'string' ? data.title : 'Unknown',
-    yearsExperience: toNumber(data.yearsExperience, 0),
-    summary: typeof data.summary === 'string' ? data.summary.trim() : '',
+    yearsExperience,
+    totalExperience: typeof data.totalExperience === 'string' ? data.totalExperience : `${yearsExperience} years`,
+    experienceLevel: typeof data.experienceLevel === 'string' ? data.experienceLevel : 'Not specified',
+    summary: typeof data.summary === 'string' ? data.summary.trim() : typeof data.profileSummary === 'string' ? data.profileSummary.trim() : '',
+    profileSummary: typeof data.profileSummary === 'string' ? data.profileSummary.trim() : typeof data.summary === 'string' ? data.summary.trim() : '',
     technicalSkills: mergedSkills,
     softSkills: toArray(data.softSkills),
     languages,
     frameworks,
     databases,
     tools,
-    education: Array.isArray(data.education) ? data.education : [],
-    experience: Array.isArray(data.experience) ? data.experience : [],
+    education,
+    experience: workExperience,
+    workExperience,
+    projects,
     certifications: toArray(data.certifications),
     keywords: toArray(data.keywords),
+    strengths: toArray(data.strengths),
+    areasToImprove: toArray(data.areasToImprove || data.gaps),
+    overallScore: toNumber(data.overallScore ?? data.score ?? data.matchScore, 0),
+    hiringRecommendation: typeof data.hiringRecommendation === 'string' ? data.hiringRecommendation.trim() : typeof data.recommendation === 'string' ? data.recommendation.trim() : '',
   };
 }
 
@@ -663,41 +697,39 @@ async function extractResumeData(resumeText) {
 
   try {
     const promptResumeText = String(resumeText || '').slice(0, RESUME_TEXT_LIMIT);
-    const prompt = `Task: Parse the resume into structured JSON for software engineering hiring (Frontend, Backend, Full Stack).
+    const prompt = `Task: Parse the resume into structured JSON for hiring review.
 
   Critical rules:
   - Output must be a single valid JSON object only. No prose, no markdown, no comments.
   - Use exactly the keys and nesting shown below. Do not add extra keys.
   - If a value is unknown, use null for scalar fields or [] for arrays.
   - Extract only what is explicitly supported by the resume text. Do not infer or guess facts.
-  - Keep skills canonical and deduplicated (for example "JavaScript", "TypeScript", "React", "Node.js", "Express", "REST APIs", "GraphQL", "PostgreSQL", "MongoDB", "Redis", "Docker", "Kubernetes", "AWS", "Azure", "GCP", "CI/CD", "Git").
-  - technicalSkills should contain only technical abilities/tools/frameworks/languages from evidence in the resume, with priority for modern software engineering stack signals.
-  - For software roles, prioritize accurate extraction from these buckets when present in evidence:
-    - Frontend: React, Next.js, TypeScript, state management, testing, UI performance/accessibility.
-    - Backend: Node.js/Express/NestJS or other backend frameworks, API design (REST/GraphQL), auth/security basics, caching, message queues.
-    - Data/Storage: SQL/NoSQL databases, schema/query proficiency, migrations, indexing awareness.
-    - DevOps/Cloud: Docker, CI/CD, cloud deployment (AWS/Azure/GCP), monitoring/logging.
-  - Do not add skills that are not explicitly stated or clearly evidenced.
-  - summary must be grounded in resume evidence and be 2-3 concise sentences.
+  - Keep skills canonical and deduplicated.
+  - technicalSkills should contain only technical abilities/tools/frameworks/languages from evidence in the resume.
+  - summary and profileSummary must be grounded in resume evidence and be 2-3 concise sentences.
   - yearsExperience should be a number; if unclear, use 0.
 
   Return JSON with exactly this structure:
 {
-  "name": "Full Name",
+  "candidateName": "Full Name",
   "email": "email or null",
-  "title": "Current/Target Job Title",
-  "yearsExperience": 3,
-  "summary": "2-3 sentence professional summary",
+  "phone": "phone or null",
+  "experienceLevel": "Entry | Mid-level | Senior | Lead | Not specified",
+  "totalExperience": "3 years",
+  "profileSummary": "2-3 sentence professional summary",
   "technicalSkills": ["skill1", "skill2"],
   "softSkills": ["skill1", "skill2"],
   "languages": ["Python", "JavaScript"],
   "frameworks": ["React", "Node.js"],
   "databases": ["PostgreSQL", "MongoDB"],
   "tools": ["Git", "Docker"],
+  "workExperience": [{ "title": "Software Engineer", "company": "Inotech", "duration": "1 year", "highlights": ["built X", "improved Y"] }],
   "education": [{ "degree": "BSc Computer Science", "institution": "NUST", "year": 2022 }],
-  "experience": [{ "title": "Software Engineer", "company": "Inotech", "duration": "1 year", "highlights": ["built X", "improved Y"] }],
-  "certifications": ["AWS Certified", "etc"],
-  "keywords": ["top 10 ATS keywords from this resume"]
+  "projects": [{ "name": "Project Name", "description": "What it does", "technologies": ["React", "Node.js"] }],
+  "strengths": ["top strengths"],
+  "areasToImprove": ["gaps or missing signals"],
+  "overallScore": 82,
+  "hiringRecommendation": "Short recommendation sentence"
 }
 
 Resume text:

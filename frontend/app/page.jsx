@@ -7,6 +7,7 @@ import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, FileUp, ShieldChec
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
 import { getFriendlyApiError, validateResumeFile } from '../src/lib/input-utils';
+import ResumeAnalysisSections from '../src/components/analysis/ResumeAnalysisSections';
 
 const FEATURE_CARDS = [
   {
@@ -141,7 +142,7 @@ export default function LandingPage() {
       formData.append('resume', selectedResume);
 
       const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
-      setResumeAnalysis(response.data?.resumeData || null);
+      setResumeAnalysis(response.data?.analysis || response.data?.resumeData || null);
       setResumeText(response.data?.resumeText || '');
     } catch (error) {
       setResumeError(getFriendlyApiError(error, 'Resume analysis failed.'));
@@ -305,13 +306,7 @@ export default function LandingPage() {
                 {isAnalyzingResume ? 'Analyzing...' : 'Analyze Resume'}
               </button>
 
-              {resumeAnalysis ? (
-                <div className="mt-5 rounded-2xl border border-white/10 bg-[#0B0B10] p-4">
-                  <p className="text-sm font-semibold text-white">Extracted summary</p>
-                  <p className="mt-2 text-sm text-[#B7B7C6]">{resumeAnalysis.summary || 'Summary unavailable.'}</p>
-                  <p className="mt-3 text-sm text-[#B7B7C6]">{resumeAnalysis.email || 'No email extracted'}</p>
-                </div>
-              ) : null}
+              {resumeAnalysis ? <ResumeAnalysisSections analysis={resumeAnalysis} /> : null}
             </article>
           </section>
 

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { BarChart3, CheckCircle2, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { addAnalysisEntry } from '../../../lib/history-store';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../../lib/input-utils';
+import ResumeAnalysisSections from '../../../components/analysis/ResumeAnalysisSections';
 
 function scoreTone(score) {
   if (score >= 80) {
@@ -69,13 +70,16 @@ function buildResumeText(profile) {
   }
 
   const sections = [
-    profile.name ? `Name: ${profile.name}` : '',
+    profile.name || profile.candidateName ? `Name: ${profile.name || profile.candidateName}` : '',
     profile.email ? `Email: ${profile.email}` : '',
     profile.title ? `Title: ${profile.title}` : '',
-    profile.summary ? `Summary: ${profile.summary}` : '',
-    Array.isArray(profile.skills) && profile.skills.length ? `Skills: ${profile.skills.join(', ')}` : '',
-    Array.isArray(profile.experience) && profile.experience.length
-      ? `Experience:\n${profile.experience.map((item) => [item?.title, item?.company, item?.duration, item?.description].filter(Boolean).join(' | ')).join('\n')}`
+    profile.summary || profile.profileSummary ? `Summary: ${profile.summary || profile.profileSummary}` : '',
+    Array.isArray(profile.skills || profile.technicalSkills) && (profile.skills || profile.technicalSkills).length ? `Skills: ${(profile.skills || profile.technicalSkills).join(', ')}` : '',
+    Array.isArray(profile.experience || profile.workExperience) && (profile.experience || profile.workExperience).length
+      ? `Experience:\n${(profile.experience || profile.workExperience).map((item) => [item?.title, item?.company, item?.duration, item?.description, Array.isArray(item?.highlights) ? item.highlights.join('; ') : ''].filter(Boolean).join(' | ')).join('\n')}`
+      : '',
+    Array.isArray(profile.projects) && profile.projects.length
+      ? `Projects:\n${profile.projects.map((item) => [item?.name, item?.description, Array.isArray(item?.technologies) ? item.technologies.join(', ') : ''].filter(Boolean).join(' | ')).join('\n')}`
       : '',
     Array.isArray(profile.education) && profile.education.length
       ? `Education:\n${profile.education.map((item) => [item?.degree, item?.institution, item?.year].filter(Boolean).join(' | ')).join('\n')}`
@@ -133,7 +137,7 @@ export default function CandidateWorkbench() {
       formData.append('resume', selectedFile);
       const response = await axios.post('/api/analyze/resume', formData, { timeout: 120000 });
       setAnalysisId(response.data?.analysisId || '');
-      setResumeData(response.data?.resumeData || null);
+      setResumeData(response.data?.analysis || response.data?.resumeData || null);
       setResumeText(response.data?.resumeText || '');
     } catch (error) {
       setAnalysisError(getFriendlyApiError(error, 'Resume analysis failed.'));
@@ -218,8 +222,9 @@ export default function CandidateWorkbench() {
       return;
     }
 
-    const text = buildLearningPlanText(learningPlan, resumeData?.name, jobTitle);
-    downloadPdf(`SmartHire_LearningPlan_${String(resumeData?.name || 'Candidate').replace(/[^a-z0-9]+/gi, '_')}.pdf`, text);
+    const candidateName = resumeData?.name || resumeData?.candidateName || 'Candidate';
+    const text = buildLearningPlanText(learningPlan, candidateName, jobTitle);
+    downloadPdf(`SmartHire_LearningPlan_${String(candidateName).replace(/[^a-z0-9]+/gi, '_')}.pdf`, text);
   }
 
   return (
@@ -255,13 +260,7 @@ export default function CandidateWorkbench() {
             <FileText className="h-4 w-4" />
             {isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}
           </button>
-          {resumeData ? (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-[#1A1A24] p-4 text-sm text-[#8B8B9E]">
-              <p className="font-semibold text-[#F1F1F3]">{resumeData.name || 'Candidate Profile'}</p>
-              <p className="mt-1">{resumeData.email || 'No email extracted'}</p>
-              <p className="mt-2">{resumeData.summary || 'Summary unavailable.'}</p>
-            </div>
-          ) : null}
+          {resumeData ? <ResumeAnalysisSections analysis={resumeData} /> : null}
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-[#0F0F13] p-5">

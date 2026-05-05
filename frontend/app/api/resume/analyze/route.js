@@ -87,11 +87,115 @@ async function extractTextFromUpload(upload) {
 function buildGeminiPrompt(resumeText) {
   const normalizedResumeText = String(resumeText || '').trim();
 
-  const basePrompt = 'Extract structured profile data from this resume. Return ONLY a JSON object with fields: name, email, phone, skills (array), experience (array of {title, company, duration, description}), education (array of {degree, institution, year}), summary (2-3 sentences). Return ONLY valid JSON, no markdown, no explanation.';
+  const basePrompt = 'Analyze this resume in structured chunks. Return ONLY valid JSON with these exact keys: candidateName, email, phone, experienceLevel, totalExperience, profileSummary, technicalSkills, softSkills, languages, frameworks, databases, tools, workExperience, education, projects, strengths, areasToImprove, overallScore, hiringRecommendation. Use strings for candidateName, email, phone, experienceLevel, totalExperience, profileSummary, hiringRecommendation. Use arrays for technicalSkills, softSkills, languages, frameworks, databases, tools, strengths, areasToImprove. Each workExperience item must include title, company, duration, highlights. Each education item must include degree, institution, year. Each project item must include name, description, technologies. overallScore must be a number from 0 to 100. Return only valid JSON and no markdown.';
 
   return [
     `${basePrompt}\n\nResume text:\n${normalizedResumeText}`,
   ];
+}
+
+function normalizeList(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+    .filter(Boolean);
+}
+
+function normalizeNestedArray(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((item) => item && typeof item === 'object');
+}
+
+function normalizeAnalysisData(raw) {
+  const data = raw && typeof raw === 'object' ? raw : {};
+  const workExperienceSource = normalizeNestedArray(data.workExperience || data.experience).map((item) => ({
+    title: String(item?.title || item?.role || item?.position || '').trim(),
+    company: String(item?.company || item?.organization || item?.employer || '').trim(),
+    duration: String(item?.duration || item?.period || item?.range || '').trim(),
+    highlights: normalizeList(item?.highlights || item?.bullets || item?.description),
+  }));
+  const educationSource = normalizeNestedArray(data.education).map((item) => ({
+    degree: String(item?.degree || item?.qualification || item?.program || '').trim(),
+    institution: String(item?.institution || item?.school || item?.university || '').trim(),
+    year: String(item?.year || item?.graduationYear || item?.completed || '').trim(),
+  }));
+  const projectSource = normalizeNestedArray(data.projects).map((item) => ({
+    name: String(item?.name || item?.title || item?.projectName || '').trim(),
+    description: String(item?.description || item?.summary || item?.details || '').trim(),
+    technologies: normalizeList(item?.technologies || item?.techStack || item?.tools),
+  }));
+  const yearsExperience = Number(data.yearsExperience ?? data.totalExperience);
+  const safeYearsExperience = Number.isFinite(yearsExperience) ? yearsExperience : null;
+
+  return {
+    candidateName: String(data.candidateName || data.name || '').trim() || 'Unknown',
+    name: String(data.name || data.candidateName || '').trim() || 'Unknown',
+    email: data.email ? String(data.email).trim() : null,
+    phone: data.phone ? String(data.phone).trim() : null,
+    experienceLevel: String(data.experienceLevel || '').trim(),
+    totalExperience: String(data.totalExperience || '').trim() || (safeYearsExperience === null ? '' : `${safeYearsExperience} years`),
+    yearsExperience: safeYearsExperience === null ? 0 : safeYearsExperience,
+    profileSummary: String(data.profileSummary || data.summary || '').trim(),
+    summary: String(data.summary || data.profileSummary || '').trim(),
+    technicalSkills: normalizeList(data.technicalSkills || data.skills),
+    softSkills: normalizeList(data.softSkills),
+    languages: normalizeList(data.languages),
+    frameworks: normalizeList(data.frameworks),
+    databases: normalizeList(data.databases),
+    tools: normalizeList(data.tools),
+    workExperience: workExperienceSource,
+    experience: workExperienceSource.map((item) => ({
+      title: item.title,
+      company: item.company,
+      duration: item.duration,
+      description: item.highlights.join(' '),
+    })),
+    education: educationSource,
+    projects: projectSource,
+    strengths: normalizeList(data.strengths),
+    areasToImprove: normalizeList(data.areasToImprove || data.gaps),
+    overallScore: Number.isFinite(Number(data.overallScore ?? data.score ?? data.matchScore))
+      ? Number(data.overallScore ?? data.score ?? data.matchScore)
+      : null,
+    hiringRecommendation: String(data.hiringRecommendation || data.recommendation || '').trim(),
+  };
+}
+
+function mapAnalysisToResumeData(analysis) {
+  const data = analysis && typeof analysis === 'object' ? analysis : {};
+
+  return {
+    name: data.candidateName || data.name || 'Unknown',
+    candidateName: data.candidateName || data.name || 'Unknown',
+    email: data.email || null,
+    phone: data.phone || null,
+    title: data.experienceLevel || 'Unknown',
+    yearsExperience: Number.isFinite(Number(data.yearsExperience)) ? Number(data.yearsExperience) : 0,
+    summary: data.profileSummary || data.summary || '',
+    profileSummary: data.profileSummary || data.summary || '',
+    technicalSkills: data.technicalSkills || [],
+    skills: data.technicalSkills || [],
+    softSkills: data.softSkills || [],
+    languages: data.languages || [],
+    frameworks: data.frameworks || [],
+    databases: data.databases || [],
+    tools: data.tools || [],
+    experience: data.workExperience || [],
+    workExperience: data.workExperience || [],
+    education: data.education || [],
+    projects: data.projects || [],
+    strengths: data.strengths || [],
+    areasToImprove: data.areasToImprove || [],
+    overallScore: data.overallScore,
+    hiringRecommendation: data.hiringRecommendation || '',
+    keywords: data.technicalSkills || [],
+  };
 }
 
 function parseMultipartRequest(request) {
@@ -350,13 +454,16 @@ export async function POST(request) {
       );
     }
 
-    const resumeData = await analyzeWithGemini(extractedText);
+    const analysis = await analyzeWithGemini(extractedText);
+    const resumeData = mapAnalysisToResumeData(analysis);
 
     return NextResponse.json(
       {
         status: 'ok',
+        success: true,
         timestamp: new Date().toISOString(),
         version: '1.0.0',
+        analysis,
         resumeData,
         resumeText: extractedText,
       },

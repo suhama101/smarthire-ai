@@ -71,6 +71,7 @@ router.post('/resume', upload.single('resume'), async (req, res, next) => {
     res.json({
       message: 'Resume analyzed successfully!',
       analysisId: analysis.id,
+      analysis: resumeData,
       resumeData,
       resumeText: analysis.raw_text || cleanedText,
       createdAt: analysis.created_at,
