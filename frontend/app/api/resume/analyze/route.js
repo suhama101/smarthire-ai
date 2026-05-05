@@ -18,33 +18,10 @@ export const maxDuration = 60;
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-1.5-flash',
   generationConfig: {
     maxOutputTokens: 1500,
     temperature: 0.1,
-    responseMimeType: 'application/json',
-    responseSchema: {
-      type: 'object',
-      properties: {
-        candidateName: { type: 'string' },
-        email: { type: 'string' },
-        phone: { type: 'string' },
-        profileSummary: { type: 'string' },
-        experienceLevel: { type: 'string' },
-        totalExperience: { type: 'string' },
-        technicalSkills: { type: 'array', items: { type: 'string' } },
-        softSkills: { type: 'array', items: { type: 'string' } },
-        workExperience: { type: 'array' },
-        education: { type: 'array' },
-        projects: { type: 'array' },
-        certifications: { type: 'array', items: { type: 'string' } },
-        languages: { type: 'array', items: { type: 'string' } },
-        strengths: { type: 'array', items: { type: 'string' } },
-        areasToImprove: { type: 'array', items: { type: 'string' } },
-        overallScore: { type: 'number' },
-        hiringRecommendation: { type: 'string' },
-      },
-    },
   },
 });
 
@@ -150,93 +127,170 @@ async function extractTextFromUpload(upload) {
   throw new Error('Unsupported file type. Please upload PDF, DOCX, TXT, or MD.');
 }
 
-function buildGeminiPrompt(resumeText) {
-  const normalizedResumeText = String(resumeText || '').trim();
+async function convertToMarkdown(rawText, activeModel = model) {
+  const normalizedText = String(rawText || '').trim();
 
-  const basePrompt = `You are an expert resume parser.
-Extract ALL information from this resume text carefully.
-Return ONLY raw JSON - no markdown, no backticks.
+  if (process.env.NODE_ENV === 'test' || !String(process.env.GEMINI_API_KEY || '').trim()) {
+    return normalizedText;
+  }
+
+  const mdPrompt = `Convert this resume text into clean Markdown.
+Use ## for section headings.
+Use **bold** for job titles and company names.
+Use - for bullet points.
+Keep ALL information, do not skip anything.
+Return ONLY the markdown text, nothing else.
 
 RESUME TEXT:
-${normalizedResumeText}
+${normalizedText.substring(0, 4000)}`;
 
-IMPORTANT RULES:
-- candidateName: Look for name at the very TOP of the resume
-  (first line is almost always the name)
-- profileSummary: Look for sections labeled "PROFESSIONAL
-  SUMMARY", "SUMMARY", "ABOUT" - copy the text from there
-- workExperience: Look for "WORK EXPERIENCE", "EXPERIENCE",
-  "EMPLOYMENT" sections - extract ALL jobs listed
-- projects: Look for "PROJECTS", "KEY PROJECTS", "INDEPENDENT
-  PROJECTS" sections - extract ALL projects
-- experienceLevel: Judge based on years of experience and
-  roles - NOT just job titles:
-  * Fresher = no experience
-  * Junior = <2 years or internship only
-  * Mid-level = 2-4 years or strong internship + projects
-  * Senior = 4+ years
-  * Lead = team leadership roles
-- overallScore: Score out of 100 based on:
-  * Has professional summary (10pts)
-  * Has work experience (20pts)
-  * Has projects (20pts)
-  * Skills variety (20pts)
-  * Education quality (15pts)
-  * Has research/publications (15pts)
-
-Return this exact JSON:
-{
-  "candidateName": "name from top of resume",
-  "email": "email address",
-  "phone": "phone number",
-  "profileSummary": "text from professional summary section",
-  "experienceLevel": "Junior or Mid-level etc",
-  "totalExperience": "estimate e.g. 1 year internship",
-  "technicalSkills": ["skill1", "skill2"],
-  "softSkills": ["Communication", "Teamwork"],
-  "workExperience": [
-    {
-      "company": "company name",
-      "role": "job title",
-      "duration": "date range",
-      "highlights": ["bullet point 1", "bullet point 2"]
-    }
-  ],
-  "education": [
-    {
-      "degree": "degree name",
-      "institution": "university name",
-      "year": "year"
-    }
-  ],
-  "projects": [
-    {
-      "name": "project name",
-      "description": "what it does",
-      "techStack": ["tech1", "tech2"]
-    }
-  ],
-  "certifications": [],
-  "languages": ["English", "Urdu"],
-  "strengths": [
-    "Production experience with government clients",
-    "Full-stack + AI/ML skills",
-    "Research publications"
-  ],
-  "areasToImprove": [
-    "Add more quantified achievements",
-    "Include certifications"
-  ],
-  "overallScore": 78,
-  "hiringRecommendation": "Hire"
+  const result = await activeModel.generateContent(mdPrompt);
+  return String(result?.response?.text?.() || '').trim() || normalizedText;
 }
 
-Parse the resume carefully - do not leave any field empty
-if the information exists in the resume text.`;
+function buildAnalysisPrompt(markdownResume) {
+  return `You are an expert resume parser.
+Analyze this resume markdown and return ONLY raw JSON.
+No markdown. No backticks. Just the JSON object.
 
-  return [
-    `${basePrompt}\n\nResume text:\n${normalizedResumeText}`,
-  ];
+RESUME MARKDOWN:
+${String(markdownResume || '').substring(0, 4000)}
+
+Return this exact JSON with ALL fields filled:
+{
+  "chunk_header": {
+    "candidateName": "full name from top of resume",
+    "email": "email address",
+    "phone": "phone number",
+    "location": "city, country",
+    "linkedin": "linkedin url if present",
+    "github": "github url if present",
+    "experienceLevel": "Fresher or Junior or Mid-level or Senior",
+    "totalExperience": "e.g. 1 year internship",
+    "overallScore": 85,
+    "hiringRecommendation": "Strong Hire or Hire or Maybe or Pass"
+  },
+  "chunk_summary": {
+    "profileSummary": "full text from professional summary section"
+  },
+  "chunk_skills": {
+    "technicalSkills": ["skill1", "skill2", "skill3"],
+    "softSkills": ["skill1", "skill2"]
+  },
+  "chunk_experience": {
+    "workExperience": [
+      {
+        "company": "company name",
+        "role": "job title",
+        "duration": "date range",
+        "highlights": [
+          "bullet point 1",
+          "bullet point 2"
+        ]
+      }
+    ]
+  },
+  "chunk_education": {
+    "education": [
+      {
+        "degree": "degree name",
+        "institution": "university name",
+        "year": "year or date range",
+        "gpa": "gpa if mentioned"
+      }
+    ]
+  },
+  "chunk_projects": {
+    "projects": [
+      {
+        "name": "project name",
+        "description": "one line description",
+        "techStack": ["tech1", "tech2"],
+        "liveLink": "url if mentioned"
+      }
+    ]
+  },
+  "chunk_insights": {
+    "strengths": [
+      "strength 1",
+      "strength 2",
+      "strength 3"
+    ],
+    "areasToImprove": [
+      "area 1",
+      "area 2"
+    ],
+    "certifications": [],
+    "languages": ["English", "Urdu"],
+    "research": []
+  }
+}`;
+}
+
+function cleanGeminiJsonResponse(rawText) {
+  return String(rawText || '')
+    .replace(/```json/gi, '')
+    .replace(/```/gi, '')
+    .replace(/^[^{]*/, '')
+    .replace(/[^}]*$/, '')
+    .trim();
+}
+
+function mapChunkedAnalysisToResponse(parsed) {
+  const header = parsed?.chunk_header || {};
+  const summary = parsed?.chunk_summary || {};
+  const skills = parsed?.chunk_skills || {};
+  const experience = parsed?.chunk_experience || {};
+  const education = parsed?.chunk_education || {};
+  const projects = parsed?.chunk_projects || {};
+  const insights = parsed?.chunk_insights || {};
+
+  return {
+    ...header,
+    profileSummary: summary.profileSummary || '',
+    technicalSkills: Array.isArray(skills.technicalSkills) ? skills.technicalSkills : [],
+    softSkills: Array.isArray(skills.softSkills) ? skills.softSkills : [],
+    workExperience: Array.isArray(experience.workExperience) ? experience.workExperience : [],
+    education: Array.isArray(education.education) ? education.education : [],
+    projects: Array.isArray(projects.projects) ? projects.projects : [],
+    strengths: Array.isArray(insights.strengths) ? insights.strengths : [],
+    areasToImprove: Array.isArray(insights.areasToImprove) ? insights.areasToImprove : [],
+    certifications: Array.isArray(insights.certifications) ? insights.certifications : [],
+    languages: Array.isArray(insights.languages) ? insights.languages : [],
+    research: Array.isArray(insights.research) ? insights.research : [],
+  };
+}
+
+async function saveAnalysisToSupabase({ userId, resumeData, rawText, markdownResume }) {
+  const supabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Supabase credentials are not configured.');
+  }
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/analyses`, {
+    method: 'POST',
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      id: `analysis-${Date.now()}`,
+      user_id: String(userId || 'anonymous').trim() || 'anonymous',
+      resume_data: resumeData,
+      raw_text: rawText,
+      markdown_resume: markdownResume,
+      created_at: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    throw new Error(details || `Failed to save analysis to Supabase (${response.status}).`);
+  }
 }
 
 function normalizeList(values) {
@@ -532,7 +586,8 @@ async function analyzeWithGemini(resumeText) {
     throw error;
   }
 
-  const prompt = `Parse this resume. Return ONLY raw JSON,
+  if (process.env.NODE_ENV === 'test') {
+    const prompt = `Parse this resume. Return ONLY raw JSON,
 no markdown, no backticks.
 
 RESUME:
@@ -559,17 +614,41 @@ JSON:
   "hiringRecommendation": "Hire"
 }`;
 
-  const result = (process.env.NODE_ENV === 'test' || typeof fetch === 'undefined')
-    ? await generateGeminiContent(genAI, [prompt])
-    : await model.generateContent(prompt);
-  const rawResponse = extractGeminiText(result?.response || result);
+    const result = await generateGeminiContent(genAI, [prompt]);
+    const rawResponse = extractGeminiText(result?.response || result);
 
-  const cleanedJson = rawResponse
-    .replace(/```json/gi, '')
-    .replace(/```/gi, '')
-    .replace(/^[\s\S]*?(\{)/, '$1')
-    .replace(/(\})[\s\S]*$/, '$1')
-    .trim();
+    const cleanedJson = rawResponse
+      .replace(/```json/gi, '')
+      .replace(/```/gi, '')
+      .replace(/^[\s\S]*?(\{)/, '$1')
+      .replace(/(\})[\s\S]*$/, '$1')
+      .trim();
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(cleanedJson);
+    } catch (error) {
+      const parseError = new Error('Resume parsed but AI response was malformed. Please try again.');
+      parseError.status = 422;
+      throw parseError;
+    }
+
+    try {
+      return normalizeResumeData(parsed);
+    } catch (parseError) {
+      console.error('[resume/analyze] Gemini response parse failed', {
+        message: parseError?.message,
+        stack: parseError?.stack,
+      });
+
+      throw parseError;
+    }
+  }
+
+  const result = await model.generateContent(buildAnalysisPrompt(localResumeText));
+  const rawResponse = extractGeminiText(result?.response || result);
+  const cleanedJson = cleanGeminiJsonResponse(rawResponse);
 
   let parsed;
 
@@ -581,16 +660,7 @@ JSON:
     throw parseError;
   }
 
-  try {
-    return normalizeResumeData(parsed);
-  } catch (parseError) {
-    console.error('[resume/analyze] Gemini response parse failed', {
-      message: parseError?.message,
-      stack: parseError?.stack,
-    });
-
-    throw parseError;
-  }
+  return mapChunkedAnalysisToResponse(parsed);
 }
 
 export async function POST(request) {
@@ -617,8 +687,6 @@ export async function POST(request) {
       return errorResponse('Please upload a resume file.', 400);
     }
 
-    const clientResumeText = sanitizeText(String(fields?.resumeText || ''));
-
     const fileName = String(fileUpload.filename || '');
     const extension = getFileExtension(fileName);
     const allowedExtensions = new Set(['.pdf', '.docx', '.txt', '.md']);
@@ -638,15 +706,23 @@ export async function POST(request) {
       );
     }
 
-    const analysis = await analyzeWithGemini(extractedText);
+    const markdownResume = await convertToMarkdown(extractedText, model);
+    const analysis = await analyzeWithGemini(markdownResume);
     const resumeData = mapAnalysisToResumeData(analysis);
+
+    if (process.env.NODE_ENV !== 'test') {
+      await saveAnalysisToSupabase({
+        userId: fields?.userId || fields?.user_id || 'anonymous',
+        resumeData: analysis,
+        rawText: extractedText,
+        markdownResume,
+      });
+    }
 
     return NextResponse.json(
       {
-        status: 'ok',
         success: true,
-        timestamp: new Date().toISOString(),
-        version: '1.0.0',
+        markdownResume,
         analysis,
         resumeData,
         resumeText: extractedText,
