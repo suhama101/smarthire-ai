@@ -41,9 +41,49 @@ async function extractPdfText(buffer) {
       resolve('');
     });
 
-    pdfParser.on('pdfParser_dataReady', () => {
-      const text = pdfParser.getRawTextContent();
-      resolve(String(text || '').replace(/\s+/g, ' ').trim());
+    pdfParser.on('pdfParser_dataReady', (pdfData) => {
+      try {
+        let fullText = '';
+
+        if (pdfData?.Pages?.length) {
+          pdfData.Pages.forEach((page) => {
+            let pageText = '';
+
+            page.Texts.forEach((textItem) => {
+              textItem.R.forEach((run) => {
+                try {
+                  const decoded = decodeURIComponent(run.T);
+                  pageText += decoded + ' ';
+                } catch (error) {
+                  pageText += run.T + ' ';
+                }
+              });
+            });
+
+            fullText += pageText + '\n';
+          });
+        } else {
+          const rawText = typeof pdfParser.getRawTextContent === 'function' ? pdfParser.getRawTextContent() : '';
+          fullText = String(rawText || '').replace(/%20/g, ' ');
+        }
+
+        const cleanedText = fullText
+          .replace(/\s+/g, ' ')
+          .replace(/\n\s*\n/g, '\n')
+          .trim();
+
+        console.log('PDF extracted text preview:',
+          cleanedText.substring(0, 300));
+
+        if (!cleanedText || cleanedText.length < 50) {
+          reject(new Error('Could not extract readable text'));
+          return;
+        }
+
+        resolve(cleanedText);
+      } catch (err) {
+        reject(err);
+      }
     });
 
     pdfParser.parseBuffer(buffer);
