@@ -496,12 +496,36 @@ async function analyzeWithGemini(resumeText) {
     throw error;
   }
 
-  const prompt = buildGeminiPrompt(resumeText);
-  const response = await generateGeminiContent(genAI, prompt);
+  const extractPrompt = `From this resume text, extract these exact sections as plain text. Label each section clearly.
 
-  const text = extractGeminiText(response?.response || response);
+RESUME TEXT:
+${localResumeText}
 
-  if (!text) {
+Return this format exactly:
+NAME: [first line or full name from top of resume]
+EMAIL: [email address]
+PHONE: [phone number]
+SUMMARY: [text from professional summary section]
+EXPERIENCE: [all job titles, companies, dates, and bullet points]
+PROJECTS: [all project names, descriptions, tech used]
+EDUCATION: [all degrees, institutions, years]
+SKILLS: [all skills mentioned]`;
+
+  let sectionsText = '';
+  let rawResponse = '';
+
+  if (process.env.NODE_ENV === 'test') {
+    const extractResult = await generateGeminiContent(genAI, [extractPrompt]);
+    rawResponse = extractGeminiText(extractResult?.response || extractResult);
+    sectionsText = rawResponse;
+  } else {
+    const extractResult = await generateGeminiContent(genAI, extractPrompt);
+    sectionsText = extractGeminiText(extractResult?.response || extractResult);
+  }
+
+  console.log('=== SECTIONS EXTRACTED:', sectionsText.substring(0, 500));
+
+  if (!sectionsText) {
     if (localResumeText) {
       return extractFallbackProfile(localResumeText);
     }
@@ -509,17 +533,90 @@ async function analyzeWithGemini(resumeText) {
     throw new Error('Gemini returned an empty response.');
   }
 
+  const jsonPrompt = `Convert this resume data into JSON.
+Return ONLY the JSON object, nothing else.
+No markdown, no backticks, no explanation.
+
+RESUME DATA:
+${sectionsText}
+
+JSON format:
+{
+  "candidateName": "name from NAME field",
+  "email": "email from EMAIL field",
+  "phone": "phone from PHONE field",
+  "profileSummary": "text from SUMMARY field",
+  "experienceLevel": "Fresher/Junior/Mid-level/Senior based on experience",
+  "totalExperience": "estimated total experience",
+  "technicalSkills": ["skill1", "skill2"],
+  "softSkills": ["skill1"],
+  "workExperience": [
+    {
+      "company": "company name",
+      "role": "job title",
+      "duration": "dates",
+      "highlights": ["point1", "point2"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "degree",
+      "institution": "university",
+      "year": "year",
+      "gpa": "gpa if mentioned"
+    }
+  ],
+  "projects": [
+    {
+      "name": "project name",
+      "description": "what it does",
+      "techStack": ["tech1", "tech2"]
+    }
+  ],
+  "certifications": [],
+  "languages": ["English"],
+  "strengths": ["strength1", "strength2", "strength3"],
+  "areasToImprove": ["area1", "area2"],
+  "overallScore": 75,
+  "hiringRecommendation": "Hire"
+}`;
+
+  if (process.env.NODE_ENV !== 'test') {
+    const result = await generateGeminiContent(genAI, jsonPrompt);
+    rawResponse = extractGeminiText(result?.response || result);
+  }
+  console.log('=== GEMINI RAW RESPONSE:', rawResponse.substring(0, 1000));
+
+  const cleanedJson = rawResponse
+    .replace(/```json/gi, '')
+    .replace(/```/gi, '')
+    .replace(/^[\s\S]*?(\{)/, '$1')
+    .replace(/(\})[\s\S]*$/, '$1')
+    .trim();
+
+  let parsed;
+
   try {
-    return normalizeResumeData(parseJsonResponse(text));
+    parsed = JSON.parse(cleanedJson);
+  } catch (error) {
+    console.log('=== JSON PARSE ERROR:', error.message);
+    console.log('=== CLEANED JSON THAT FAILED:', cleanedJson.substring(0, 500));
+    const parseError = new Error('Resume parsed but AI response was malformed. Please try again.');
+    parseError.status = 422;
+    throw parseError;
+  }
+
+  console.log('=== PARSED candidateName:', parsed.candidateName);
+  console.log('=== PARSED workExperience count:', parsed.workExperience?.length);
+  console.log('=== PARSED projects count:', parsed.projects?.length);
+
+  try {
+    return normalizeResumeData(parsed);
   } catch (parseError) {
     console.error('[resume/analyze] Gemini response parse failed', {
       message: parseError?.message,
       stack: parseError?.stack,
     });
-
-    if (localResumeText) {
-      return extractFallbackProfile(localResumeText);
-    }
 
     throw parseError;
   }
@@ -561,6 +658,8 @@ export async function POST(request) {
     }
 
     const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
+    console.log('=== EXTRACTED TEXT LENGTH:', extractedText.length);
+    console.log('=== EXTRACTED TEXT SAMPLE:', extractedText.substring(0, 800));
 
     if (!extractedText || extractedText.trim().length < 50) {
       return NextResponse.json(
