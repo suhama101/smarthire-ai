@@ -17,6 +17,13 @@ export const maxDuration = 60;
 
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+  model: 'gemini-1.5-flash',
+  generationConfig: {
+    maxOutputTokens: 1500,
+    temperature: 0.1,
+  },
+});
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
@@ -37,7 +44,6 @@ async function extractPdfText(buffer) {
     const pdfParser = new PDFParser(null, 1);
 
     pdfParser.on('pdfParser_dataError', (errData) => {
-      console.error('[resume/analyze] PDF parse failed', errData?.parserError || errData);
       resolve('');
     });
 
@@ -71,9 +77,6 @@ async function extractPdfText(buffer) {
           .replace(/\s+/g, ' ')
           .replace(/\n\s*\n/g, '\n')
           .trim();
-
-        console.log('PDF extracted text preview:',
-          cleanedText.substring(0, 300));
 
         if (!cleanedText || cleanedText.length < 50) {
           reject(new Error('Could not extract readable text'));
@@ -506,96 +509,37 @@ async function analyzeWithGemini(resumeText) {
     throw error;
   }
 
-  const extractPrompt = `From this resume text, extract these exact sections as plain text. Label each section clearly.
+  const prompt = `Parse this resume. Return ONLY raw JSON,
+no markdown, no backticks.
 
-RESUME TEXT:
-${localResumeText}
+RESUME:
+${localResumeText.substring(0, 3000)}
 
-Return this format exactly:
-NAME: [first line or full name from top of resume]
-EMAIL: [email address]
-PHONE: [phone number]
-SUMMARY: [text from professional summary section]
-EXPERIENCE: [all job titles, companies, dates, and bullet points]
-PROJECTS: [all project names, descriptions, tech used]
-EDUCATION: [all degrees, institutions, years]
-SKILLS: [all skills mentioned]`;
-
-  let sectionsText = '';
-  let rawResponse = '';
-
-  if (process.env.NODE_ENV === 'test') {
-    const extractResult = await generateGeminiContent(genAI, [extractPrompt]);
-    rawResponse = extractGeminiText(extractResult?.response || extractResult);
-    sectionsText = rawResponse;
-  } else {
-    const extractResult = await generateGeminiContent(genAI, extractPrompt);
-    sectionsText = extractGeminiText(extractResult?.response || extractResult);
-  }
-
-  console.log('=== SECTIONS EXTRACTED:', sectionsText.substring(0, 500));
-
-  if (!sectionsText) {
-    if (localResumeText) {
-      return extractFallbackProfile(localResumeText);
-    }
-
-    throw new Error('Gemini returned an empty response.');
-  }
-
-  const jsonPrompt = `Convert this resume data into JSON.
-Return ONLY the JSON object, nothing else.
-No markdown, no backticks, no explanation.
-
-RESUME DATA:
-${sectionsText}
-
-JSON format:
+JSON:
 {
-  "candidateName": "name from NAME field",
-  "email": "email from EMAIL field",
-  "phone": "phone from PHONE field",
-  "profileSummary": "text from SUMMARY field",
-  "experienceLevel": "Fresher/Junior/Mid-level/Senior based on experience",
-  "totalExperience": "estimated total experience",
-  "technicalSkills": ["skill1", "skill2"],
+  "candidateName": "name from first line",
+  "email": "email",
+  "phone": "phone",
+  "profileSummary": "summary section text",
+  "experienceLevel": "Junior or Mid-level or Senior",
+  "totalExperience": "e.g. 1 year",
+  "technicalSkills": ["skill1","skill2"],
   "softSkills": ["skill1"],
-  "workExperience": [
-    {
-      "company": "company name",
-      "role": "job title",
-      "duration": "dates",
-      "highlights": ["point1", "point2"]
-    }
-  ],
-  "education": [
-    {
-      "degree": "degree",
-      "institution": "university",
-      "year": "year",
-      "gpa": "gpa if mentioned"
-    }
-  ],
-  "projects": [
-    {
-      "name": "project name",
-      "description": "what it does",
-      "techStack": ["tech1", "tech2"]
-    }
-  ],
+  "workExperience": [{"company":"","role":"","duration":"","highlights":[]}],
+  "education": [{"degree":"","institution":"","year":"","gpa":""}],
+  "projects": [{"name":"","description":"","techStack":[]}],
   "certifications": [],
   "languages": ["English"],
-  "strengths": ["strength1", "strength2", "strength3"],
-  "areasToImprove": ["area1", "area2"],
+  "strengths": ["strength1","strength2"],
+  "areasToImprove": ["area1"],
   "overallScore": 75,
   "hiringRecommendation": "Hire"
 }`;
 
-  if (process.env.NODE_ENV !== 'test') {
-    const result = await generateGeminiContent(genAI, jsonPrompt);
-    rawResponse = extractGeminiText(result?.response || result);
-  }
-  console.log('=== GEMINI RAW RESPONSE:', rawResponse.substring(0, 1000));
+  const result = (process.env.NODE_ENV === 'test' || typeof fetch === 'undefined')
+    ? await generateGeminiContent(genAI, [prompt])
+    : await model.generateContent(prompt);
+  const rawResponse = extractGeminiText(result?.response || result);
 
   const cleanedJson = rawResponse
     .replace(/```json/gi, '')
@@ -609,16 +553,10 @@ JSON format:
   try {
     parsed = JSON.parse(cleanedJson);
   } catch (error) {
-    console.log('=== JSON PARSE ERROR:', error.message);
-    console.log('=== CLEANED JSON THAT FAILED:', cleanedJson.substring(0, 500));
     const parseError = new Error('Resume parsed but AI response was malformed. Please try again.');
     parseError.status = 422;
     throw parseError;
   }
-
-  console.log('=== PARSED candidateName:', parsed.candidateName);
-  console.log('=== PARSED workExperience count:', parsed.workExperience?.length);
-  console.log('=== PARSED projects count:', parsed.projects?.length);
 
   try {
     return normalizeResumeData(parsed);
@@ -668,9 +606,6 @@ export async function POST(request) {
     }
 
     const extractedText = sanitizeText(await extractTextFromUpload(fileUpload));
-    console.log('=== EXTRACTED TEXT LENGTH:', extractedText.length);
-    console.log('=== EXTRACTED TEXT SAMPLE:', extractedText.substring(0, 800));
-
     if (!extractedText || extractedText.trim().length < 50) {
       return errorResponse(
         isPdfUpload
