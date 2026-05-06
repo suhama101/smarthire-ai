@@ -103,10 +103,13 @@ const signup = async (req, res) => {
         .single();
 
       if (error) {
+        console.error('DB insert error:', JSON.stringify(error));
+
         if (isUniqueConstraintError(error)) {
           return res.status(409).json({ error: 'Email already registered' });
         }
-        throw error;
+
+        return res.status(error?.status || 500).json({ error: error?.message || 'Signup failed. Please try again.' });
       }
 
       const token = generateToken(newUser);
