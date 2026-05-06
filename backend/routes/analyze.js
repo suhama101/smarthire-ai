@@ -129,7 +129,7 @@ router.post('/match', async (req, res, next) => {
       return res.status(404).json({ error: 'Resume analysis not found.' });
     }
 
-    const matchResult = await matchJobDescription(analysis.resume_data, trimmedJobDescription);
+    const matchResult = await matchJobDescription(analysis.resume_data, trimmedJobDescription, jobTitle || 'Unknown Role');
 
     // Save the match
     const jobMatch = await saveJobMatch(

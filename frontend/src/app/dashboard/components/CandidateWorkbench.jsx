@@ -178,7 +178,7 @@ export default function CandidateWorkbench() {
         date: new Date().toISOString(),
         resumeFilename: selectedFile?.name || 'Resume',
         jobTitle: nextJobTitle,
-        matchScore: nextResult?.matchScore || 0,
+        matchScore: Number(nextResult?.matchScore) || Number(nextResult?.overallScore) || 0,
         recommendation: nextResult?.recommendation || 'Review manually',
         fullResult: {
           resumeData,
@@ -287,7 +287,7 @@ export default function CandidateWorkbench() {
                 </span>
               </div>
               <div className="flex items-end gap-3">
-                <span className={`inline-flex rounded-2xl border px-4 py-2 text-3xl font-semibold ${scoreTone(matchResult.matchScore)}`}>
+                <span className={`inline-flex rounded-2xl border px-4 py-2 text-3xl font-semibold ${scoreTone(Number(matchResult.matchScore) || Number(matchResult.overallScore) || 0)}`}>
                   {Math.round(Number(matchResult.matchScore) || 0)}%
                 </span>
                 <p className="pb-1 text-sm text-[#8B8B9E]">Overall fit score</p>

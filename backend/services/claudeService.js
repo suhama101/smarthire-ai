@@ -547,6 +547,7 @@ function normalizeResumeData(raw) {
 function normalizeMatchResult(raw, fallbackResult) {
   const fallback = fallbackResult || {
     overallScore: 0,
+    matchScore: 0,
     breakdown: {
       technicalSkills: 0,
       experience: 0,
@@ -558,14 +559,17 @@ function normalizeMatchResult(raw, fallbackResult) {
     strengths: [],
     gaps: ['Could not extract skills from the job description. Please provide a more detailed job description.'],
     recommendation: 'Could not extract skills from the job description. Please provide a more detailed job description.',
+    summary: 'Could not extract skills from the job description. Please provide a more detailed job description.',
     atsKeywords: [],
   };
 
   const data = raw && typeof raw === 'object' ? raw : {};
   const breakdown = data.breakdown && typeof data.breakdown === 'object' ? data.breakdown : {};
+  const score = clampScore(data.matchScore ?? data.overallScore, fallback.overallScore);
 
   return {
-    overallScore: clampScore(data.overallScore, fallback.overallScore),
+    matchScore: score,
+    overallScore: score,
     breakdown: {
       technicalSkills: clampScore(breakdown.technicalSkills, fallback.breakdown.technicalSkills),
       experience: clampScore(breakdown.experience, fallback.breakdown.experience),
@@ -587,6 +591,9 @@ function normalizeMatchResult(raw, fallbackResult) {
     recommendation: typeof data.recommendation === 'string' && data.recommendation.trim()
       ? data.recommendation.trim()
       : String(fallback.recommendation || 'Improve profile details and re-run analysis.'),
+    summary: typeof data.summary === 'string' && data.summary.trim()
+      ? data.summary.trim()
+      : String(fallback.summary || fallback.recommendation || 'Improve profile details and re-run analysis.'),
     atsKeywords: uniqueStrings(toArray(data.atsKeywords)).length
       ? uniqueStrings(toArray(data.atsKeywords))
       : uniqueStrings(toArray(fallback.atsKeywords)),
@@ -782,7 +789,7 @@ ${promptResumeText}`;
 /**
  * Match resume against a job description and return detailed scoring
  */
-async function matchJobDescription(resumeData, jobDescription) {
+async function matchJobDescription(resumeData, jobDescription, jobTitle = 'Unknown') {
   const fallbackMatch = buildFallbackMatchResult(resumeData, jobDescription);
 
   if (!isAnthropicConfigured()) {
@@ -794,70 +801,50 @@ async function matchJobDescription(resumeData, jobDescription) {
   }
 
   try {
-    const promptJobDescription = String(jobDescription || '').slice(0, JOB_DESCRIPTION_LIMIT);
-    const prompt = `Task: Score candidate-job fit for software engineering roles (Frontend, Backend, Full Stack) conservatively and logically.
+    const prompt = `You are an expert technical recruiter.
+Compare this resume against the job description.
+Return ONLY raw JSON. No markdown. No backticks.
 
-Critical rules:
-- Output must be a single valid JSON object only. No prose, no markdown, no comments.
-- Use exactly the keys and nesting shown below. Do not add extra keys.
-- Use only the provided candidate fields and job description. Do not invent credentials, projects, education, or skills.
-- First extract required skills from the job description.
-- Then compare those required skills to the candidate resume data.
-- matchedSkills must contain only overlapping skills.
-- missingSkills must contain only required skills that are absent from the candidate.
-- overallScore must be calculated from actual overlap, not a generic estimate.
-- scoring must be internally consistent:
-  - overallScore must be an integer from 0 to 100.
-  - each breakdown value must be an integer from 0 to 100.
-  - if the job description does not contain enough meaningful signals, set overallScore to 0 and return empty matchedSkills and missingSkills.
-- matchedSkills: include only skills clearly present in BOTH candidate data and JD.
-- missingSkills: include only JD-required skills not present in candidate data.
-- strengths and gaps: write evidence-based, specific statements only.
-- recommendation: concise and practical; avoid generic fluff.
-- atsKeywords: include JD terms that are relevant and currently underrepresented in candidate data.
-- Evaluate using realistic multinational software hiring expectations:
-  - Core coding stack fit (JavaScript/TypeScript, frontend/backend frameworks, API development).
-  - Practical engineering depth (testing, debugging, code quality, maintainability).
-  - Production readiness (databases, cloud exposure, observability basics, secure auth patterns).
-  - Collaboration signals (Git workflows, CI/CD familiarity, cross-team delivery context when evidenced).
-  - Seniority alignment via yearsExperience and role title match.
-- For missingSkills, prioritize practical gaps commonly expected in modern roles when relevant to the JD, such as Docker, CI/CD, system design basics, API security, cloud deployment, testing strategy, and database design.
-- Be conservative: if JD asks for a capability and resume evidence is weak/absent, treat it as a gap.
+RESUME SKILLS AND EXPERIENCE:
+${JSON.stringify({
+  skills: resumeData.technicalSkills,
+  experience: resumeData.workExperience,
+  summary: resumeData.profileSummary,
+})}
 
-CANDIDATE SKILLS: ${JSON.stringify(resumeData.technicalSkills || [])}
-CANDIDATE LANGUAGES: ${JSON.stringify(resumeData.languages || [])}
-CANDIDATE FRAMEWORKS: ${JSON.stringify(resumeData.frameworks || [])}
-CANDIDATE EXPERIENCE: ${resumeData.yearsExperience || 0} years
-CANDIDATE TITLE: ${resumeData.title || 'Unknown'}
+JOB TITLE: ${String(jobTitle || 'Unknown').trim() || 'Unknown'}
 
 JOB DESCRIPTION:
-${promptJobDescription}
+${String(jobDescription || '').trim()}
 
-Return JSON with exactly this structure:
+IMPORTANT MATCHING RULES:
+- Compare skills case-insensitively
+- "React js" matches "React" and "ReactJS"
+- "Nextjs" matches "Next.js" and "NextJS"  
+- "Node.js" matches "Nodejs" and "NodeJS"
+- Consider partial matches as matches
+- matchScore must be a NUMBER between 0-100
+- Calculate score based on:
+  * Skills match percentage (50 points max)
+  * Experience relevance (30 points max)
+  * Education fit (20 points max)
+
+Return this exact JSON:
 {
-  "overallScore": 78,
-  "jobSkills": ["React", "Node.js", "Docker"],
-  "breakdown": {
-    "technicalSkills": 85,
-    "experience": 70,
-    "keywords": 80,
-    "education": 75
-  },
-  "matchedSkills": ["React", "Node.js"],
-  "missingSkills": ["Docker", "Kubernetes"],
-  "strengths": ["Strong React experience", "Good Node.js background"],
-  "gaps": ["No cloud experience", "Missing CI/CD knowledge"],
-  "recommendation": "Strong candidate. Focus on adding Docker and cloud skills.",
-  "atsKeywords": ["keywords from JD that candidate should add to resume"]
+  "matchScore": 75,
+  "matchedSkills": ["React", "Node.js", "CSS"],
+  "missingSkills": ["Docker", "AWS"],
+  "recommendation": "Strong Match or Good Match or Weak Match",
+  "summary": "2-3 sentence explanation of the match"
 }`;
 
     logAiDebug('Match prompt input', {
       candidateSkills: resumeData?.technicalSkills || [],
       candidateLanguages: resumeData?.languages || [],
       candidateFrameworks: resumeData?.frameworks || [],
-      jobDescriptionLength: promptJobDescription.length,
+      jobDescriptionLength: String(jobDescription || '').length,
       promptLength: prompt.length,
-      jobDescriptionPreview: previewText(promptJobDescription, 2500),
+      jobDescriptionPreview: previewText(jobDescription, 2500),
       promptPreview: previewText(prompt, 4000),
     });
 
@@ -892,10 +879,11 @@ Return JSON with exactly this structure:
     const normalized = normalizeMatchResult(parsed, fallbackMatch);
     const finalMatch = {
       ...normalized,
-      overallScore: fallbackMatch.overallScore,
-      breakdown: fallbackMatch.breakdown,
-      matchedSkills: fallbackMatch.matchedSkills.length ? fallbackMatch.matchedSkills : normalized.matchedSkills,
-      missingSkills: fallbackMatch.missingSkills.length ? fallbackMatch.missingSkills : normalized.missingSkills,
+      matchScore: normalized.matchScore,
+      overallScore: normalized.matchScore,
+      breakdown: normalized.breakdown,
+      matchedSkills: normalized.matchedSkills.length ? normalized.matchedSkills : fallbackMatch.matchedSkills,
+      missingSkills: normalized.missingSkills.length ? normalized.missingSkills : fallbackMatch.missingSkills,
       strengths: normalized.strengths.length ? normalized.strengths : fallbackMatch.strengths,
       gaps: normalized.gaps.length ? normalized.gaps : fallbackMatch.gaps,
       recommendation: normalized.recommendation || fallbackMatch.recommendation,

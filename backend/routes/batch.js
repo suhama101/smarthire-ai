@@ -141,7 +141,7 @@ router.post('/analyze', async (req, res, next) => {
 
         const cleanedText = cleanText(rawText);
         const resumeData = await extractResumeData(cleanedText);
-        const matchResult = await matchJobDescription(resumeData, jobDescription);
+        const matchResult = await matchJobDescription(resumeData, jobDescription, req.body?.jobTitle || 'Unknown Role');
 
         rankedCandidates.push({
           name: getCandidateName(resumeData, file),

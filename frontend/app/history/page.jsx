@@ -122,7 +122,7 @@ export default function HistoryPage() {
       <div key="date"><p className="font-medium text-[#F1F1F3]">{formatDate(analysis.date)}</p></div>,
       <div key="resume"><p className="font-medium text-[#F1F1F3]">{analysis.resumeFilename || '--'}</p></div>,
       <div key="job"><p className="font-medium text-[#F1F1F3]">{analysis.jobTitle || '--'}</p></div>,
-      <div key="score"><span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">{analysis.matchScore || 0}%</span></div>,
+      <div key="score"><span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">{Number(analysis.matchScore) || Number(analysis.overallScore) || 0}%</span></div>,
       <div key="rec"><p className="max-w-[24rem] text-[#8B8B9E]">{analysis.recommendation || '--'}</p></div>,
     ],
   }));
@@ -222,7 +222,7 @@ export default function HistoryPage() {
                     <p className="mt-1 text-sm text-[#8B8B9E]">{selectedAnalysis.jobTitle || '--'} · {formatDate(selectedAnalysis.date)}</p>
                     <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4">
                       <p className="text-sm font-semibold text-[#F1F1F3]">Match Score</p>
-                      <p className="mt-1 text-3xl font-semibold text-[#F1F1F3]">{selectedAnalysis.matchScore || 0}%</p>
+                      <p className="mt-1 text-3xl font-semibold text-[#F1F1F3]">{Number(selectedAnalysis.matchScore) || Number(selectedAnalysis.overallScore) || 0}%</p>
                       <p className="mt-3 text-sm text-[#8B8B9E]">{selectedAnalysis.recommendation || 'No recommendation saved.'}</p>
                     </div>
                     <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4 text-sm text-[#8B8B9E]">
