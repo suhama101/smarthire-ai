@@ -36,6 +36,10 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password required'),
 });
 
+function getFirstValidationMessage(error, fallback) {
+  return error?.issues?.[0]?.message || error?.errors?.[0]?.message || fallback;
+}
+
 function usesRealSupabase(client) {
   return Boolean(client && !client.__isMemory);
 }
@@ -66,7 +70,7 @@ const signup = async (req, res) => {
   try {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0].message });
+      return res.status(400).json({ error: getFirstValidationMessage(parsed.error, 'Invalid signup data') });
     }
 
     const { email, password, full_name } = parsed.data;
@@ -135,7 +139,7 @@ const login = async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0].message });
+      return res.status(400).json({ error: getFirstValidationMessage(parsed.error, 'Invalid login data') });
     }
 
     const { email, password } = parsed.data;
