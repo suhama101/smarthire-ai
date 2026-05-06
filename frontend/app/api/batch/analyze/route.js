@@ -350,7 +350,7 @@ async function callGemini(jobTitle, companyName, jobDescription, resumeText, can
     const raw = String(result?.response?.text?.() || '').trim();
 
     if (!raw) {
-      throw new Error('AI could not analyze this resume');
+      return fallbackResult();
     }
 
     const cleaned = raw
@@ -373,7 +373,8 @@ async function callGemini(jobTitle, companyName, jobDescription, resumeText, can
       },
     });
   } catch (error) {
-    throw new Error(error?.message || 'AI could not analyze this resume');
+    console.error('Batch Gemini fallback used:', error?.message || error);
+    return fallbackResult();
   }
 }
 
