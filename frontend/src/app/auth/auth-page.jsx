@@ -91,13 +91,14 @@ export default function AuthPage({ mode }) {
     setFieldErrors({});
 
     try {
+      const roleToSend = String(role || 'candidate').toLowerCase();
       const endpoint = isSignup ? getApiUrl('auth/signup') : getApiUrl('auth/login');
       const payload = isSignup
         ? {
             email: trimmedEmail,
             password: trimmedPassword,
             full_name: trimmedFullName,
-            role,
+            role: roleToSend,
           }
         : {
             email: trimmedEmail,
@@ -115,7 +116,12 @@ export default function AuthPage({ mode }) {
       persistAuthSession({ token, user });
       router.push(redirectTarget);
     } catch (authError) {
-      setError(getFriendlyApiError(authError, 'Authentication failed.'));
+      setError(
+        authError?.response?.data?.error ||
+        authError?.message ||
+        authError?.error ||
+        'Signup failed. Please try again.'
+      );
     } finally {
       setBusy(false);
     }

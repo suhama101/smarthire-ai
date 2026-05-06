@@ -69,7 +69,8 @@ const signup = async (req, res) => {
       return res.status(400).json({ error: parsed.error.errors[0].message });
     }
 
-    const { email, password, full_name, role } = parsed.data;
+    const { email, password, full_name } = parsed.data;
+    const role = String(parsed.data.role || 'candidate').toLowerCase();
     const password_hash = await bcrypt.hash(password, 12);
     const id = createUserId();
 
@@ -122,7 +123,7 @@ const signup = async (req, res) => {
     }
   } catch (err) {
     console.error('Signup error:', err);
-    res.status(500).json({ error: 'Signup failed. Please try again.' });
+    res.status(err?.status || 500).json({ error: err?.message || 'Signup failed. Please try again.' });
   }
 };
 
