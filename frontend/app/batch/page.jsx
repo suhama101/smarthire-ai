@@ -442,24 +442,26 @@ export default function BatchResumeUploadPage() {
 
       const formData = new FormData();
 
-      workingFiles.forEach((fileEntry) => {
-        formData.append('files', fileEntry.file);
-      });
+      formData.append('jobTitle', savedJob.jobTitle || '');
+      formData.append('companyName', savedJob.companyName || '');
+      formData.append('jobDescription', savedJob.jobDescription || '');
 
-      formData.append('jobTitle', sanitizeText(savedJob.jobTitle));
-      formData.append('companyName', sanitizeText(savedJob.companyName));
-      formData.append('jobDescription', sanitizeText(savedJob.jobDescription));
+      for (const file of files) {
+        formData.append('files', file.file, file.name);
+      }
+
+      console.log('Files being sent:', files.length);
 
       const response = await fetch('/api/batch', {
         method: 'POST',
         body: formData,
       });
 
-      const responseData = await response.json().catch(() => ({}));
+      const responseData = await response.json();
+      console.log('Batch response:', responseData);
 
-      if (!response.ok || !responseData?.success) {
-        const statusText = [response?.status, response?.statusText].filter(Boolean).join(' ').trim();
-        const errorMsg = responseData?.error || responseData?.message || statusText || 'Batch analysis failed. Please try again.';
+      if (!response.ok || !responseData.success) {
+        const errorMsg = responseData?.error || responseData?.message || `${response.status} ${response.statusText}` || 'Batch failed';
         throw new Error(errorMsg);
       }
 
@@ -524,7 +526,7 @@ export default function BatchResumeUploadPage() {
       setIsProcessing(false);
       return;
     } catch (itemError) {
-      const message = itemError?.message || getFriendlyApiError(itemError, 'Batch analysis failed. Please try again.');
+      const message = itemError?.message || 'Batch analysis failed';
       setFiles((current) => current.map((item) => (item.status === 'Done' ? item : { ...item, status: 'Failed', error: message })));
       setError(message);
       setProgress({ current: 0, total: 0, label: '' });

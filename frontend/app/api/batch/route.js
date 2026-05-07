@@ -102,18 +102,44 @@ export async function POST(req) {
     console.log('GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
     console.log('GEMINI_MODEL:', process.env.GEMINI_MODEL);
 
-    const formData = await req.formData();
-    const jobTitle = formData.get('jobTitle') || 'Not specified';
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (e) {
+      console.error('FormData parse error:', e.message);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Could not read form data: ${e.message}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const jobTitle = formData.get('jobTitle') || '';
     const jobDescription = formData.get('jobDescription') || '';
+
     const files = formData.getAll('files');
+    console.log('Files received:', files.length);
+    console.log('File names:', files.map((file) => file?.name));
 
     if (!files || files.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: 'No files uploaded',
+          error: `No files received. Files count: ${files.length}`,
         },
         { status: 400 }
+      );
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'GEMINI_API_KEY not configured',
+        },
+        { status: 500 }
       );
     }
 
