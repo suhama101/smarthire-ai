@@ -796,7 +796,12 @@ export default function BatchResumeUploadPage() {
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={handleStartBatchAnalysis} disabled={!files.length || isProcessing || !savedJob} className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={handleStartBatchAnalysis}
+                  disabled={files.length === 0 || !jobForm.jobTitle.trim() || !jobForm.jobDescription.trim() || isProcessing}
+                  className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderInput className="h-4 w-4" />}
                   Start Batch Analysis
                 </button>
