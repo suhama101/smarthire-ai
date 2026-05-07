@@ -96,6 +96,44 @@ function normalizeResult(payload, fileName) {
   };
 }
 
+function extractSkillKeywords(text) {
+  const normalized = String(text || '').toLowerCase();
+  const keywords = [
+    'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
+    'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
+    'tailwind', 'redux', 'graphql', 'testing', 'jest', 'cypress', 'playwright', 'git', 'devops', 'accessibility',
+    'api', 'frontend', 'backend', 'cloud', 'security', 'architecture', 'communication', 'leadership', 'product',
+  ];
+
+  return Array.from(new Set(keywords.filter((keyword) => normalized.includes(keyword))));
+}
+
+function buildFallbackAnalysis(resumeText, jobTitle, jobDescription, fileName) {
+  const candidateName = String(fileName || 'Candidate').replace(/\.[^.]+$/, '').trim() || 'Candidate';
+  const resumeKeywords = extractSkillKeywords(resumeText);
+  const jobKeywords = extractSkillKeywords(`${jobTitle} ${jobDescription}`);
+  const matchedSkills = resumeKeywords.filter((skill) => jobKeywords.includes(skill));
+  const missingSkills = jobKeywords.filter((skill) => !matchedSkills.includes(skill));
+  const matchScore = jobKeywords.length ? Math.max(20, Math.min(90, Math.round((matchedSkills.length / jobKeywords.length) * 100))) : 50;
+
+  return normalizeResult(
+    {
+      candidateName,
+      email: '',
+      experienceLevel: matchScore >= 75 ? 'Senior' : matchScore >= 50 ? 'Mid-level' : 'Junior',
+      technicalSkills: resumeKeywords,
+      matchScore,
+      matchedSkills,
+      missingSkills,
+      recommendation: matchScore >= 75 ? 'Good Match' : matchScore >= 50 ? 'Weak Match' : 'Weak Match',
+      summary: 'Analysis completed using fallback matching because Gemini quota or parsing failed.',
+      overallScore: matchScore,
+      hiringRecommendation: matchScore >= 75 ? 'Hire' : matchScore >= 50 ? 'Maybe' : 'Pass',
+    },
+    candidateName
+  );
+}
+
 export async function POST(req) {
   try {
     console.log('=== BATCH ROUTE REACHED ===');
@@ -191,6 +229,7 @@ JOB: ${jobTitle} - ${String(jobDescription).substring(0, 200)}
 "hiringRecommendation":"Hire"}`;
 
         let parsed = null;
+        const fallbackResult = buildFallbackAnalysis(extractedText, jobTitle, jobDescription, fileName);
 
         try {
           const result = await model.generateContent(prompt);
@@ -233,8 +272,9 @@ JOB: ${jobTitle} - ${String(jobDescription).substring(0, 200)}
           console.error('Parse error for', file.name, ':', parseErr.message);
           results.push({
             fileName: file.name,
-            success: false,
-            error: 'Parse error: ' + parseErr.message,
+            success: true,
+            data: fallbackResult,
+            warning: 'Fallback analysis used: ' + parseErr.message,
           });
           continue;
         }
