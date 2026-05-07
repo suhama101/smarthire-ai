@@ -443,37 +443,39 @@ export default function BatchResumeUploadPage() {
       const formData = new FormData();
 
       workingFiles.forEach((fileEntry) => {
-        formData.append('resumes', fileEntry.file);
+        formData.append('files', fileEntry.file);
       });
 
       formData.append('jobTitle', sanitizeText(savedJob.jobTitle));
       formData.append('companyName', sanitizeText(savedJob.companyName));
       formData.append('jobDescription', sanitizeText(savedJob.jobDescription));
 
-      const response = await fetch('/api/batch/analyze', {
+      const response = await fetch('/api/batch', {
         method: 'POST',
         body: formData,
       });
 
       const responseData = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
+      if (!response.ok || !responseData?.success) {
         throw new Error(responseData?.error || 'Batch analysis failed. Please try again.');
       }
 
-      const rankedResults = Array.isArray(responseData?.rankedCandidates)
-        ? responseData.rankedCandidates.map((candidate, index) => ({
-            ...normalizeBatchResult(
-              {
-                ...candidate,
-                candidateName: candidate?.candidateName || candidate?.name,
-                matchScore: Number.isFinite(Number(candidate?.matchScore)) ? Number(candidate.matchScore) : candidate?.score,
-              },
-              candidate?.candidateName || candidate?.name || workingFiles[index]?.name || `Candidate ${index + 1}`
-            ),
-            sourceFileName: workingFiles[index]?.name || candidate?.name || `Candidate ${index + 1}`,
-            rank: Number.isFinite(Number(candidate?.rank)) ? Number(candidate.rank) : index + 1,
-          }))
+      const rankedResults = Array.isArray(responseData?.results)
+        ? responseData.results
+            .filter((result) => result?.success)
+            .map((result, index) => ({
+              ...normalizeBatchResult(
+                {
+                  ...result.data,
+                  candidateName: result?.data?.candidateName,
+                  matchScore: Number.isFinite(Number(result?.data?.matchScore)) ? Number(result.data.matchScore) : 0,
+                },
+                result?.fileName || workingFiles[index]?.name || `Candidate ${index + 1}`
+              ),
+              sourceFileName: result?.fileName || workingFiles[index]?.name || `Candidate ${index + 1}`,
+              rank: index + 1,
+            }))
         : [];
 
       const rankedByScore = rankedResults.length

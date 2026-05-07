@@ -32,24 +32,43 @@ describe('BatchResumeUploadPage', () => {
     };
 
     global.fetch = jest.fn().mockImplementation(async (_url, options) => {
-      const files = Array.from(options.body.getAll('resumes'));
+      const files = Array.from(options.body.getAll('files'));
       const response = {
+        success: true,
         message: 'Batch analysis completed successfully!',
-        rankedCandidates: files.map((file) => {
+        results: files.map((file) => {
           if (String(file?.name || '').includes('ava')) {
             return {
-              rank: 1,
-              name: 'Ava Chen',
-              score: 96,
-              matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
+              fileName: file.name,
+              success: true,
+              data: {
+                candidateName: 'Ava Chen',
+                matchScore: 96,
+                matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
+                missingSkills: ['GraphQL'],
+                technicalSkills: ['React', 'Next.js', 'Tailwind CSS'],
+                recommendation: 'Strong Match',
+                summary: 'Strong frontend match.',
+                overallScore: 96,
+                hiringRecommendation: 'Hire',
+              },
             };
           }
 
           return {
-            rank: 2,
-            name: 'Noah Patel',
-            score: 91,
-            matchedSkills: ['Node.js', 'Express', 'PostgreSQL'],
+            fileName: file.name,
+            success: true,
+            data: {
+              candidateName: 'Noah Patel',
+              matchScore: 91,
+              matchedSkills: ['Node.js', 'Express', 'PostgreSQL'],
+              missingSkills: ['Redis'],
+              technicalSkills: ['Node.js', 'Express', 'PostgreSQL'],
+              recommendation: 'Strong Match',
+              summary: 'Strong backend match.',
+              overallScore: 91,
+              hiringRecommendation: 'Hire',
+            },
           };
         }),
       };
@@ -84,7 +103,7 @@ describe('BatchResumeUploadPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(fetch.mock.calls[0][1].body.getAll('resumes').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
+      expect(fetch.mock.calls[0][1].body.getAll('files').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
       expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
