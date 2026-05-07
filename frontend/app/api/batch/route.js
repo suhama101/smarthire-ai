@@ -98,6 +98,10 @@ function normalizeResult(payload, fileName) {
 
 export async function POST(req) {
   try {
+    console.log('=== BATCH ROUTE REACHED ===');
+    console.log('GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
+    console.log('GEMINI_MODEL:', process.env.GEMINI_MODEL);
+
     const formData = await req.formData();
     const jobTitle = formData.get('jobTitle') || 'Not specified';
     const jobDescription = formData.get('jobDescription') || '';

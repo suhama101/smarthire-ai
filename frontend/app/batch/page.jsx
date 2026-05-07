@@ -458,8 +458,14 @@ export default function BatchResumeUploadPage() {
       const responseData = await response.json().catch(() => ({}));
 
       if (!response.ok || !responseData?.success) {
-        throw new Error(responseData?.error || 'Batch analysis failed. Please try again.');
+        const statusText = [response?.status, response?.statusText].filter(Boolean).join(' ').trim();
+        const errorMsg = responseData?.error || responseData?.message || statusText || 'Batch analysis failed. Please try again.';
+        throw new Error(errorMsg);
       }
+
+      const batchResultsByFile = new Map(
+        (Array.isArray(responseData?.results) ? responseData.results : []).map((result) => [result?.fileName, result])
+      );
 
       const rankedResults = Array.isArray(responseData?.results)
         ? responseData.results
@@ -486,9 +492,14 @@ export default function BatchResumeUploadPage() {
 
       setFiles((current) => current.map((item) => {
         const completed = rankedMap.get(item.name) || rankedByScore.find((result) => result.sourceFileName === item.name || result.candidateName === item.name);
+        const batchResult = batchResultsByFile.get(item.name);
 
         if (!completed) {
-          return { ...item, status: 'Failed', error: 'Batch analysis failed. Please try again.' };
+          return {
+            ...item,
+            status: 'Failed',
+            error: batchResult?.error || batchResult?.message || 'Batch analysis failed',
+          };
         }
 
         return { ...item, status: 'Done', error: '', result: completed };
@@ -513,7 +524,7 @@ export default function BatchResumeUploadPage() {
       setIsProcessing(false);
       return;
     } catch (itemError) {
-      const message = getFriendlyApiError(itemError, 'Batch analysis failed. Please try again.');
+      const message = itemError?.message || getFriendlyApiError(itemError, 'Batch analysis failed. Please try again.');
       setFiles((current) => current.map((item) => (item.status === 'Done' ? item : { ...item, status: 'Failed', error: message })));
       setError(message);
       setProgress({ current: 0, total: 0, label: '' });
