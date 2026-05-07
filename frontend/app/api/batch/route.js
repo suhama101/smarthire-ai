@@ -179,47 +179,62 @@ export async function POST(req) {
           continue;
         }
 
-        const prompt = `Parse resume and match to job.
-Return ONLY raw JSON. No markdown. No backticks.
+        const prompt = `Parse resume, return JSON only. No markdown.
 
-RESUME (first 2500 chars):
-${extractedText.substring(0, 2500)}
+RESUME: ${extractedText.substring(0, 2000)}
+JOB: ${jobTitle} - ${String(jobDescription).substring(0, 200)}
 
-JOB TITLE: ${jobTitle}
-JOB DESCRIPTION: ${String(jobDescription).substring(0, 300)}
-
-JSON:
-{
-  "candidateName": "full name",
-  "email": "email or empty",
-  "phone": "phone or empty",
-  "experienceLevel": "Fresher or Junior or Mid-level or Senior",
-  "technicalSkills": ["skill1","skill2","skill3"],
-  "matchScore": 70,
-  "matchedSkills": ["skill1","skill2"],
-  "missingSkills": ["skill1"],
-  "recommendation": "Strong Match or Good Match or Weak Match",
-  "summary": "one sentence about this candidate fit",
-  "overallScore": 70,
-  "hiringRecommendation": "Strong Hire or Hire or Maybe or Pass"
-}`;
+{"candidateName":"","email":"","experienceLevel":"Junior",
+"technicalSkills":[],"matchScore":70,"matchedSkills":[],
+"missingSkills":[],"recommendation":"Good Match",
+"summary":"one sentence","overallScore":70,
+"hiringRecommendation":"Hire"}`;
 
         let parsed = null;
 
         try {
           const result = await model.generateContent(prompt);
           const raw = result.response.text();
-          parsed = JSON.parse(extractJsonBlock(raw));
+          
+          console.log('RAW GEMINI RESPONSE:', raw.substring(0, 300));
+
+          // Multiple cleaning strategies
+          let cleaned = raw
+            .replace(/```json/gi, '')
+            .replace(/```/gi, '')
+            .trim();
+
+          // Find first { and last }
+          const firstBrace = cleaned.indexOf('{');
+          const lastBrace = cleaned.lastIndexOf('}');
+
+          if (firstBrace === -1 || lastBrace === -1) {
+            throw new Error('No JSON object found in response');
+          }
+
+          cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+
+          parsed = JSON.parse(cleaned);
+
+          // Ensure required fields exist with defaults
+          parsed.candidateName = parsed.candidateName || file.name.replace('.pdf', '');
           parsed.matchScore = Number(parsed.matchScore) || 0;
           parsed.overallScore = Number(parsed.overallScore) || 0;
-          parsed.technicalSkills = Array.isArray(parsed.technicalSkills) ? parsed.technicalSkills : [];
-          parsed.matchedSkills = Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : [];
-          parsed.missingSkills = Array.isArray(parsed.missingSkills) ? parsed.missingSkills : [];
-        } catch {
+          parsed.technicalSkills = Array.isArray(parsed.technicalSkills) 
+            ? parsed.technicalSkills : [];
+          parsed.matchedSkills = Array.isArray(parsed.matchedSkills)
+            ? parsed.matchedSkills : [];
+          parsed.missingSkills = Array.isArray(parsed.missingSkills)
+            ? parsed.missingSkills : [];
+          parsed.recommendation = parsed.recommendation || 'Weak Match';
+          parsed.summary = parsed.summary || 'Analysis completed.';
+          parsed.hiringRecommendation = parsed.hiringRecommendation || 'Maybe';
+        } catch (parseErr) {
+          console.error('Parse error for', file.name, ':', parseErr.message);
           results.push({
-            fileName,
+            fileName: file.name,
             success: false,
-            error: 'AI could not analyze this resume',
+            error: 'Parse error: ' + parseErr.message,
           });
           continue;
         }
