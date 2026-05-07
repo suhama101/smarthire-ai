@@ -28,6 +28,14 @@ function normalizePathSegments(pathSegments) {
 
 async function proxyRequest(request, pathSegments) {
   const normalizedSegments = normalizePathSegments(pathSegments);
+  const path = normalizedSegments.join('/');
+  const localRoutes = ['batch', 'resume/analyze', 'resume/batch', 'match', 'health'];
+  const isLocalRoute = localRoutes.some((route) => path === route || path.startsWith(route));
+
+  if (isLocalRoute) {
+    return NextResponse.next();
+  }
+
   const backendBaseUrl = getBackendBaseUrl();
   const targetUrl = new URL(`${backendBaseUrl}/api/${normalizedSegments.join('/')}`);
   targetUrl.search = request.nextUrl.search;
