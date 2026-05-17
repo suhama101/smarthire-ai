@@ -4,6 +4,10 @@
     "checkJs": false,
     "ignoreDeprecations": "6.0",
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "types": ["node", "jest"]
   },
   "include": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
