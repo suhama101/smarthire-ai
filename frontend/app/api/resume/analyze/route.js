@@ -172,6 +172,10 @@ RULES:
 - hiringRecommendation: Based on score:
   80+ = "Strong Hire", 60-79 = "Hire", 
   40-59 = "Maybe", below 40 = "Pass"
+- Calculate total work experience in years based on employment dates.
+- Include internships.
+- If dates are ongoing (Present/Current), calculate up to today's date which is May 2026.
+- Set yearsExperience to a number.
 
 Return this JSON (fill ALL fields, never leave empty):
 {
@@ -182,6 +186,7 @@ Return this JSON (fill ALL fields, never leave empty):
   "profileSummary": "summary text here",
   "experienceLevel": "Junior or Mid-level or Senior",
   "totalExperience": "e.g. 1 year",
+  "yearsExperience": 1,
   "technicalSkills": ["skill1", "skill2"],
   "softSkills": ["skill1", "skill2"],
   "workExperience": [
@@ -254,6 +259,7 @@ function mapChunkedAnalysisToResponse(parsed) {
 async function saveAnalysisToSupabase({ userId, resumeData, rawText }) {
   const supabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  const analysisId = `analysis-${Date.now()}`;
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error('Supabase credentials are not configured.');
@@ -268,7 +274,7 @@ async function saveAnalysisToSupabase({ userId, resumeData, rawText }) {
       Prefer: 'return=minimal',
     },
     body: JSON.stringify({
-      id: `analysis-${Date.now()}`,
+      id: analysisId,
       user_id: String(userId || 'anonymous').trim() || 'anonymous',
       resume_data: resumeData,
       raw_text: rawText,
@@ -280,6 +286,8 @@ async function saveAnalysisToSupabase({ userId, resumeData, rawText }) {
     const details = await response.text().catch(() => '');
     throw new Error(details || `Failed to save analysis to Supabase (${response.status}).`);
   }
+
+  return analysisId;
 }
 
 function normalizeList(values) {
@@ -656,19 +664,20 @@ export async function POST(request) {
     const markdownResume = await convertToMarkdown(extractedText);
     const analysis = await analyzeWithGemini(extractedText);
     const resumeData = mapAnalysisToResumeData(analysis);
+    let analysisId = null;
 
     if (process.env.NODE_ENV !== 'test') {
-      await saveAnalysisToSupabase({
+      analysisId = await saveAnalysisToSupabase({
         userId: fields?.userId || fields?.user_id || 'anonymous',
         resumeData: analysis,
         rawText: extractedText,
-        markdownResume,
       });
     }
 
     return NextResponse.json(
       {
         success: true,
+        analysisId,
         markdownResume,
         analysis,
         resumeData,

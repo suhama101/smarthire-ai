@@ -135,7 +135,7 @@ export default function CandidateWorkbench() {
     try {
       const formData = new FormData();
       formData.append('resume', selectedFile);
-      const response = await axios.post('/api/analyze/resume', formData, { timeout: 120000 });
+      const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
       setAnalysisId(response.data?.analysisId || '');
       setResumeData(response.data?.analysis || response.data?.resumeData || null);
       setResumeText(response.data?.resumeText || '');

@@ -714,6 +714,9 @@ async function extractResumeData(resumeText) {
   - Keep skills canonical and deduplicated.
   - technicalSkills should contain only technical abilities/tools/frameworks/languages from evidence in the resume.
   - summary and profileSummary must be grounded in resume evidence and be 2-3 concise sentences.
+  - Calculate total work experience in years based on employment dates.
+  - Include internships.
+  - If dates are ongoing (Present/Current), calculate up to today's date which is May 2026.
   - yearsExperience should be a number; if unclear, use 0.
 
   Return JSON with exactly this structure:
@@ -723,6 +726,7 @@ async function extractResumeData(resumeText) {
   "phone": "phone or null",
   "experienceLevel": "Entry | Mid-level | Senior | Lead | Not specified",
   "totalExperience": "3 years",
+  "yearsExperience": 3,
   "profileSummary": "2-3 sentence professional summary",
   "technicalSkills": ["skill1", "skill2"],
   "softSkills": ["skill1", "skill2"],
