@@ -29,7 +29,7 @@ function normalizePathSegments(pathSegments) {
 async function proxyRequest(request, pathSegments) {
   const normalizedSegments = normalizePathSegments(pathSegments);
   const path = normalizedSegments.join('/');
-  const localRoutes = ['batch', 'resume/analyze', 'resume/batch', 'match', 'health'];
+  const localRoutes = ['batch', 'resume/analyze', 'resume/batch', 'match', 'health', 'auth', 'job', 'learning'];
   const isLocalRoute = localRoutes.some((route) => path === route || path.startsWith(route));
 
   if (isLocalRoute) {
