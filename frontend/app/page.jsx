@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, FileUp, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
+import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
-import { validateResumeFile } from '../src/lib/input-utils';
-import ResumeAnalysisSections from '../src/components/analysis/ResumeAnalysisSections';
 
 const FEATURE_CARDS = [
   {
@@ -66,14 +64,8 @@ function normalizeErrorMessage(error, fallbackMessage = 'Something went wrong. P
 }
 
 export default function LandingPage() {
-  const resumeInputRef = useRef(null);
   const [session, setSession] = useState(null);
   const [healthState, setHealthState] = useState({ status: 'checking', label: 'Checking API...' });
-  const [selectedResume, setSelectedResume] = useState(null);
-  const [resumeAnalysis, setResumeAnalysis] = useState(null);
-  const [resumeText, setResumeText] = useState('');
-  const [resumeError, setResumeError] = useState('');
-  const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
 
   useEffect(() => {
     setSession(readStoredAuth());
@@ -111,68 +103,6 @@ export default function LandingPage() {
       window.clearTimeout(timeout);
     };
   }, []);
-
-  function handleResumeDrop(files) {
-    const file = files?.[0] || null;
-
-    setResumeError('');
-    setResumeAnalysis(null);
-    setResumeText('');
-
-    if (!file) {
-      setSelectedResume(null);
-      return;
-    }
-
-    const validation = validateResumeFile(file);
-
-    if (!validation.valid) {
-      setSelectedResume(null);
-      setResumeError(validation.message);
-      return;
-    }
-
-    setSelectedResume(file);
-  }
-
-  async function analyzeHomepageResume() {
-    const validation = validateResumeFile(selectedResume);
-
-    if (!validation.valid) {
-      setResumeError(normalizeErrorMessage(validation.message, 'Resume analysis failed.'));
-      return;
-    }
-
-    setIsAnalyzingResume(true);
-    setResumeError('');
-    setResumeAnalysis(null);
-    setResumeText('');
-
-    try {
-      const formData = new FormData();
-      formData.append('resume', selectedResume);
-
-      const response = await fetch('/api/resume/analyze', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setResumeError(normalizeErrorMessage(data.error, 'Analysis failed. Please try again.'));
-        return;
-      }
-
-      setResumeAnalysis(data.analysis || data.resumeData || null);
-      setResumeText(data.resumeText || '');
-      setResumeError('');
-    } catch (error) {
-      setResumeError('Network error. Please check your connection.');
-    } finally {
-      setIsAnalyzingResume(false);
-    }
-  }
 
   return (
     <AuthenticatedShell>
@@ -274,66 +204,6 @@ export default function LandingPage() {
                     ? 'The API did not respond in time. Check the deployment or route logs.'
                     : 'Waiting for the initial health response...'}
               </div>
-            </article>
-
-            <article className="rounded-[2rem] border border-white/10 bg-[#111118] p-6">
-              <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                <FileUp className="h-4 w-4 text-indigo-300" /> Quick Resume Upload
-              </div>
-              <p className="mt-2 text-sm text-[#8B8B9E]">Drag and drop a resume or choose one from your device. Accepted formats: PDF, DOCX, TXT, and MD.</p>
-
-              <div
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  handleResumeDrop(event.dataTransfer.files);
-                }}
-                className="mt-5 rounded-3xl border-2 border-dashed border-white/10 bg-[#0B0B10] p-6 text-center transition hover:border-white/25"
-              >
-                <input
-                  ref={resumeInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt,.md"
-                  className="hidden"
-                  onChange={(event) => {
-                    handleResumeDrop(event.target.files);
-                    event.target.value = '';
-                  }}
-                />
-                <FileUp className="mx-auto h-10 w-10 text-[#8B8B9E]" />
-                <p className="mt-4 text-base font-semibold text-[#F1F1F3]">Drop resumes here or browse your files</p>
-                <p className="mt-2 text-sm text-[#8B8B9E]">We only accept PDF, DOCX, TXT, and MD files.</p>
-                <button
-                  type="button"
-                  onClick={() => resumeInputRef.current?.click()}
-                  className="mt-5 inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90"
-                >
-                  Choose File
-                </button>
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Selected file</p>
-                <p className="mt-1 text-sm text-[#8B8B9E]">{selectedResume ? selectedResume.name : 'No file selected yet.'}</p>
-              </div>
-
-              {resumeError ? (
-                <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                  {typeof resumeError === 'string' ? resumeError : JSON.stringify(resumeError)}
-                </div>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={analyzeHomepageResume}
-                disabled={!selectedResume || isAnalyzingResume}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Sparkles className="h-4 w-4" />
-                {isAnalyzingResume ? 'Analyzing...' : 'Analyze Resume'}
-              </button>
-
-              {resumeAnalysis ? <ResumeAnalysisSections analysis={resumeAnalysis} /> : null}
             </article>
           </section>
 

@@ -251,7 +251,7 @@ function mapChunkedAnalysisToResponse(parsed) {
   };
 }
 
-async function saveAnalysisToSupabase({ userId, resumeData, rawText, markdownResume }) {
+async function saveAnalysisToSupabase({ userId, resumeData, rawText }) {
   const supabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
 
@@ -272,7 +272,6 @@ async function saveAnalysisToSupabase({ userId, resumeData, rawText, markdownRes
       user_id: String(userId || 'anonymous').trim() || 'anonymous',
       resume_data: resumeData,
       raw_text: rawText,
-      markdown_resume: markdownResume,
       created_at: new Date().toISOString(),
     }),
   });
