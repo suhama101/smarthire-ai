@@ -1,0 +1,16 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    - cron: '0 8 */5 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-health-endpoint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Vercel health endpoint
+        run: |
+          response=$(curl -f -s "https://smarthire-ai-lrq8.vercel.app/api/health")
+          echo "$response"
