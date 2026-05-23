@@ -156,24 +156,23 @@ export default function HistoryPage() {
   };
 
   return (
-    <AuthenticatedShell>
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="rounded-[2rem] border border-white/10 bg-[#15151C] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] sm:p-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Session history</p>
-              <h1 className="mt-2 text-3xl font-semibold text-[#F1F1F3]">Your analyses and batch runs</h1>
-              <p className="mt-2 max-w-2xl text-sm text-[#8B8B9E]">Everything saved in this session lives under <span className="font-semibold text-[#F1F1F3]">smarthire_history</span>, so candidate work and recruiter batch runs stay in one place.</p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={exportCurrent} className="rounded-full border border-white/10 bg-white px-4 py-2 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90">
-                Export current tab
-              </button>
-              <button type="button" onClick={handleClearHistory} className="rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5">
-                Clear all history
-              </button>
-            </div>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="rounded-[2rem] border border-white/10 bg-[#15151C] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] sm:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Session history</p>
+            <h1 className="mt-2 text-3xl font-semibold text-[#F1F1F3]">Your analyses and batch runs</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#8B8B9E]">Everything saved in this session lives under <span className="font-semibold text-[#F1F1F3]">smarthire_history</span>, so candidate work and recruiter batch runs stay in one place.</p>
           </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={exportCurrent} className="rounded-full border border-white/10 bg-white px-4 py-2 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90">
+              Export current tab
+            </button>
+            <button type="button" onClick={handleClearHistory} className="rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5">
+              Clear all history
+            </button>
+          </div>
+        </div>
 
           <div className="mt-6 inline-flex rounded-2xl border border-white/10 bg-[#0F0F13] p-1">
             {TABS.map((tab) => (
@@ -262,8 +261,7 @@ export default function HistoryPage() {
               )}
             </div>
           </div>
-        </div>
       </div>
-    </AuthenticatedShell>
+    </div>
   );
 }

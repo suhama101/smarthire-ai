@@ -105,22 +105,21 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <AuthenticatedShell>
-      <div className="min-h-screen bg-[#0B0B10] text-[#F1F1F3]">
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          {session ? (
-            <div className="mb-6 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-100">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-semibold">Welcome back, {session.user?.name || session.user?.email || 'there'}.</p>
-                  <p className="mt-1 text-emerald-100/80">Your dashboard is ready. Jump back into the workbench or review the latest batch history.</p>
-                </div>
-                <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90">
-                  Go to dashboard <ArrowRight className="h-4 w-4" />
-                </Link>
+    <div className="min-h-screen bg-[#0B0B10] text-[#F1F1F3]">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        {session ? (
+          <div className="mb-6 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-100">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Welcome back, {session.user?.name || session.user?.email || 'there'}.</p>
+                <p className="mt-1 text-emerald-100/80">Your dashboard is ready. Jump back into the workbench or review the latest batch history.</p>
               </div>
+              <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90">
+                Go to dashboard <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-          ) : null}
+          </div>
+        ) : null}
 
           <section className="overflow-hidden rounded-[2.5rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.14),_transparent_35%),linear-gradient(135deg,_#12121A_0%,_#0B0B10_55%,_#171725_100%)] px-6 py-14 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:px-10 lg:px-14 lg:py-20">
             <div className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
@@ -263,8 +262,7 @@ export default function LandingPage() {
               </div>
             </div>
           </section>
-        </div>
       </div>
-    </AuthenticatedShell>
+    </div>
   );
 }
