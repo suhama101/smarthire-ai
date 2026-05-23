@@ -142,59 +142,77 @@ ${normalizedText.substring(0, 4000)}`;
 }
 
 function buildAnalysisPrompt(extractedText) {
-  return `You are a professional resume parser.
-Read every word of this resume carefully.
-Return ONLY a raw JSON object. No markdown. No backticks.
+  const analysisPrompt = `You are an expert resume parser.
+Read every single word of this resume carefully.
+Return ONLY raw JSON. No markdown. No backticks. 
+Nothing before or after the JSON.
 
 RESUME TEXT:
-${String(extractedText || '').substring(0, 5000)}
+${extractedText.substring(0, 5000)}
 
-RULES:
-- candidateName: First line of resume is always the name
-- profileSummary: Copy exact text from SUMMARY or OBJECTIVE section
-- workExperience: Find ALL jobs. Look for company names, 
-  job titles, dates. Extract every bullet point as highlights.
-- projects: Look for PROJECTS, PORTFOLIO, PERSONAL PROJECTS,
-  KEY PROJECTS sections. If no dedicated section, look for 
-  projects mentioned inside work experience descriptions.
-  If still none found, create entries from the work 
-  descriptions themselves.
-- technicalSkills: Extract from SKILLS section AND from 
-  project/experience descriptions combined.
-- areasToImprove: ALWAYS generate 2-3 realistic gaps based on 
-  what is NOT in the resume. For example if no cloud 
-  certifications, add that. If junior level, add leadership.
-  Never return empty array for this field.
-- overallScore: Calculate as a NUMBER between 0-100.
-  Add points for: summary(10) + experience(25) + 
-  projects(20) + skills variety(20) + education(15) + 
-  extras like research/certs(10)
-- hiringRecommendation: Based on score:
-  80+ = "Strong Hire", 60-79 = "Hire", 
-  40-59 = "Maybe", below 40 = "Pass"
-- Calculate total work experience in years based on employment dates.
-- Include internships.
-- If dates are ongoing (Present/Current), calculate up to today's date which is May 2026.
-- Set yearsExperience to a number.
+STRICT RULES:
+- candidateName: The VERY FIRST line of any resume 
+  is always the person's name. Extract it.
+  Example: "SUHAMA MUSTAFA" is on line 1 = the name.
+  NEVER return "Unknown".
 
-Return this JSON (fill ALL fields, never leave empty):
+- profileSummary: Find section titled "PROFESSIONAL 
+  SUMMARY" or "SUMMARY". Copy the full paragraph.
+
+- workExperience: Find "WORK EXPERIENCE" section.
+  Each job has format: "Job Title | Company Name"
+  followed by dates and bullet points.
+  Extract EVERY job listed.
+
+- projects: Find "KEY PROJECTS", "INDEPENDENT PROJECTS" 
+  sections. Extract EVERY project with its tech stack.
+
+- experienceLevel: 
+  Internship only = "Junior"
+  1-3 years = "Mid-level"  
+  3+ years = "Senior"
+  No experience = "Fresher"
+
+- strengths: Generate 3 strengths based on what 
+  you see in the resume. NEVER leave empty.
+
+- areasToImprove: Generate 2-3 realistic gaps.
+  NEVER leave empty.
+
+- overallScore: Calculate 0-100:
+  Has summary = +10
+  Has work experience = +20
+  Has projects = +20  
+  Has education = +15
+  Skills variety = +15
+  Has research/publications = +10
+  Has achievements = +10
+
+- hiringRecommendation:
+  80+ = "Strong Hire"
+  60-79 = "Hire"
+  40-59 = "Maybe"
+  Below 40 = "Pass"
+
+Return this exact JSON with ALL fields filled:
 {
-  "candidateName": "name here",
-  "email": "email here",
-  "phone": "phone here",
-  "location": "location here",
-  "profileSummary": "summary text here",
+  "candidateName": "name from first line",
+  "email": "email address",
+  "phone": "phone number",
+  "location": "city, country",
+  "linkedin": "linkedin url if present",
+  "github": "github url if present",
+  "profileSummary": "full professional summary text",
   "experienceLevel": "Junior or Mid-level or Senior",
-  "totalExperience": "e.g. 1 year",
-  "yearsExperience": 1,
+  "totalExperience": "e.g. 1 year internship",
   "technicalSkills": ["skill1", "skill2"],
   "softSkills": ["skill1", "skill2"],
   "workExperience": [
     {
       "company": "company name",
       "role": "job title",
-      "duration": "date range or months",
-      "highlights": ["achievement1", "achievement2"]
+      "duration": "date range",
+      "highlights": ["point1", "point2"]
     }
   ],
   "education": [
@@ -202,24 +220,30 @@ Return this JSON (fill ALL fields, never leave empty):
       "degree": "degree name",
       "institution": "institution name",
       "year": "year",
-      "gpa": "gpa if mentioned or empty string"
+      "gpa": "gpa if mentioned"
     }
   ],
   "projects": [
     {
       "name": "project name",
-      "description": "what it does",
+      "description": "one line description",
       "techStack": ["tech1", "tech2"],
-      "link": "url if mentioned or empty string"
+      "link": "url if mentioned"
     }
   ],
+  "research": [
+    "research paper 1 title",
+    "research paper 2 title"
+  ],
   "certifications": [],
-  "languages": ["English"],
+  "languages": ["English", "Urdu"],
   "strengths": ["strength1", "strength2", "strength3"],
-  "areasToImprove": ["area1", "area2", "area3"],
-  "overallScore": 75,
-  "hiringRecommendation": "Hire"
+  "areasToImprove": ["area1", "area2"],
+  "overallScore": 85,
+  "hiringRecommendation": "Strong Hire"
 }`;
+
+  return analysisPrompt;
 }
 
 function cleanGeminiJsonResponse(rawText) {
@@ -583,37 +607,38 @@ async function analyzeWithGemini(resumeText) {
     throw error;
   }
 
-  const result = await generateGeminiContent(genAI, [buildAnalysisPrompt(localResumeText)]);
-  const rawResponse = extractGeminiText(result?.response || result);
-  const cleaned = String(rawResponse || '')
-    .replace(/```json/gi, '')
-    .replace(/```/gi, '')
-    .replace(/^[^{]*/s, '')
-    .replace(/[^}]*$/s, '')
-    .trim();
+  const geminiResult = await generateGeminiContent(genAI, [buildAnalysisPrompt(localResumeText)]);
+  const raw = geminiResult.response.text();
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  const cleaned = raw.substring(firstBrace, lastBrace + 1);
 
   let parsed;
 
   try {
     parsed = JSON.parse(cleaned);
   } catch (error) {
-    const parseError = new Error('Could not parse resume. Please try again.');
-    parseError.status = 422;
-    throw parseError;
+    console.error("Parse failed:", error.message);
+    console.error("Raw response:", raw.substring(0, 500));
+    return NextResponse.json({
+      success: false,
+      error: "Could not parse resume. Please try again."
+    }, { status: 422 });
   }
 
   parsed.overallScore = Number(parsed.overallScore) || 0;
   parsed.technicalSkills = parsed.technicalSkills || [];
   parsed.workExperience = parsed.workExperience || [];
   parsed.projects = parsed.projects || [];
-  parsed.strengths = parsed.strengths || [];
-  parsed.areasToImprove = Array.isArray(parsed.areasToImprove) && parsed.areasToImprove.length > 0
+  parsed.strengths = parsed.strengths?.length > 0 
+    ? parsed.strengths 
+    : ["Strong technical background", 
+       "Project ownership experience",
+       "Academic excellence"];
+  parsed.areasToImprove = parsed.areasToImprove?.length > 0
     ? parsed.areasToImprove
-    : [
-        'Gain more industry certifications',
-        'Add quantified achievements to experience',
-        'Build more personal projects',
-      ];
+    : ["Add cloud certifications",
+       "Quantify more achievements"];
 
   return normalizeResumeData(parsed);
 }
@@ -663,6 +688,11 @@ export async function POST(request) {
 
     const markdownResume = await convertToMarkdown(extractedText);
     const analysis = await analyzeWithGemini(extractedText);
+
+    if (analysis instanceof Response) {
+      return analysis;
+    }
+
     const resumeData = mapAnalysisToResumeData(analysis);
     let analysisId = null;
 
