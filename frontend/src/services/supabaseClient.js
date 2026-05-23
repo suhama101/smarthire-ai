@@ -1,3 +1,53 @@
+/*
+=== SUPABASE FREE TIER LIMITS ===
+
+AUTH (Login/Signup):
+- Max users: 50,000 (basically unlimited for this project)
+- Email confirmations: 4 per hour per email
+- Password resets: 4 per hour per email
+- No limit on login attempts (within reason)
+
+DATABASE:
+- Storage: 500MB total
+- Rows: Unlimited
+- API requests: 500MB bandwidth per month
+- Project PAUSES after 7 days of inactivity
+
+FILE STORAGE:
+- 1GB free
+
+WHAT WILL CAUSE ISSUES:
+1. Project pauses after 7 days no activity
+  FIX: Visit supabase.com/dashboard and click 
+  "Restore project" OR use UptimeRobot to ping 
+  /api/health every 5 minutes
+
+2. Same email signup too many times
+  ERROR: "Email rate limit exceeded"
+  FIX: Wait 1 hour OR use different email
+
+3. Database storage fills up (unlikely for now)
+  FIX: Delete old analyses from dashboard
+
+FOR RESUME UPLOADS:
+- Single resume: No limit, works every time
+- Batch upload: No limit on number of files
+- The ONLY limit is Gemini API (20-1500 req/day)
+  not Supabase
+
+GEMINI API LIMITS (Real bottleneck):
+- gemini-2.5-flash: 20 requests/DAY (too low!)
+- gemini-2.0-flash-lite: 1500 requests/DAY (good)
+- gemini-1.5-flash: 1500 requests/DAY (good)
+- FIX: Make sure GEMINI_MODEL=gemini-2.0-flash-lite 
+  in Vercel environment variables
+
+SUMMARY:
+- Supabase will NOT be the problem for normal usage
+- Gemini API quota is the main thing to watch
+- If app stops working, check Gemini key first
+*/
+
 import { createClient } from '@supabase/supabase-js';
 
 let cachedClient = null;
