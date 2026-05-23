@@ -2,13 +2,7 @@
   "compilerOptions": {
     "allowJs": true,
     "checkJs": false,
-    "ignoreDeprecations": "6.0",
-    "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "types": ["node", "jest"]
+    "skipLibCheck": true
   },
   "include": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", ".next"]
