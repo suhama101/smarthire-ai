@@ -578,14 +578,15 @@ function extractFallbackProfile(resumeText) {
   const emails = text.match(EMAIL_REGEX) || [];
   const phones = text.match(PHONE_REGEX) || [];
 
-  return normalizeResumeData({
-    name: lines[0] || 'Candidate',
+  return normalizeAnalysisData({
+    candidateName: lines[0] || 'Candidate',
     email: emails[0] || null,
     phone: phones[0] || null,
-    skills: extractFallbackSkills(text),
-    experience: [],
+    technicalSkills: extractFallbackSkills(text),
+    workExperience: [],
     education: [],
-    summary: text.slice(0, 280) || 'Resume text extracted successfully.',
+    projects: [],
+    profileSummary: text.slice(0, 280) || 'Resume text extracted successfully.',
   });
 }
 
@@ -640,7 +641,7 @@ async function analyzeWithGemini(resumeText) {
     : ["Add cloud certifications",
        "Quantify more achievements"];
 
-  return normalizeResumeData(parsed);
+  return normalizeAnalysisData(parsed);
 }
 
 export async function POST(request) {
