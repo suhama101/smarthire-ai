@@ -279,35 +279,40 @@ function mapChunkedAnalysisToResponse(parsed) {
   };
 }
 
-async function saveAnalysisToSupabase({ userId, resumeData, rawText }) {
+async function saveAnalysisToSupabase({ request, userId, resumeData, rawText }) {
   const supabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const analysisId = `analysis-${Date.now()}`;
+  const authHeader = request?.headers?.get('authorization') || request?.headers?.get('cookie') || '';
+  const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error('Supabase credentials are not configured.');
   }
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/analyses`, {
-    method: 'POST',
-    headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify({
-      id: analysisId,
-      user_id: String(userId || 'anonymous').trim() || 'anonymous',
-      resume_data: resumeData,
-      raw_text: rawText,
-      created_at: new Date().toISOString(),
-    }),
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  let resolvedUserId = String(userId || 'anonymous').trim() || 'anonymous';
+
+  if (token) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(token);
+    resolvedUserId = user?.id || 'anonymous';
+  }
+
+  const analysisId = crypto.randomUUID();
+
+  const { error } = await supabase.from('analyses').insert({
+    id: analysisId,
+    user_id: resolvedUserId,
+    resume_data: resumeData,
+    raw_text: String(rawText || '').substring(0, 5000),
+    created_at: new Date().toISOString(),
   });
 
-  if (!response.ok) {
-    const details = await response.text().catch(() => '');
-    throw new Error(details || `Failed to save analysis to Supabase (${response.status}).`);
+  if (error) {
+    throw new Error(error.message || `Failed to save analysis to Supabase.`);
   }
 
   return analysisId;
@@ -691,11 +696,16 @@ export async function POST(request) {
     let analysisId = null;
 
     if (process.env.NODE_ENV !== 'test') {
-      analysisId = await saveAnalysisToSupabase({
-        userId: fields?.userId || fields?.user_id || 'anonymous',
-        resumeData: analysis,
-        rawText: extractedText,
-      });
+      try {
+        analysisId = await saveAnalysisToSupabase({
+          request,
+          userId: fields?.userId || fields?.user_id || 'anonymous',
+          resumeData,
+          rawText: extractedText,
+        });
+      } catch (saveErr) {
+        console.error('Supabase save error:', saveErr.message);
+      }
     }
 
     return NextResponse.json(

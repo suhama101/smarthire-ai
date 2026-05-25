@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import axios from 'axios';
 import { BarChart3, CheckCircle2, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { addAnalysisEntry } from '../../../lib/history-store';
+import { getSupabaseClient } from '../../../services/supabaseClient.js';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../../lib/input-utils';
 import ResumeAnalysisSections from '../../../components/analysis/ResumeAnalysisSections';
 
@@ -133,9 +134,21 @@ export default function CandidateWorkbench() {
     setLearningPlan(null);
 
     try {
+      const supabase = getSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const formData = new FormData();
       formData.append('resume', selectedFile);
-      const response = await axios.post('/api/resume/analyze', formData, { timeout: 120000 });
+      const response = await axios.post('/api/resume/analyze', formData, {
+        timeout: 120000,
+        headers: session?.access_token
+          ? {
+              Authorization: `Bearer ${session.access_token}`,
+            }
+          : {},
+      });
       setAnalysisId(response.data?.analysisId || '');
       setResumeData(response.data?.analysis || response.data?.resumeData || null);
       setResumeText(response.data?.resumeText || '');

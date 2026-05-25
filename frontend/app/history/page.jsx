@@ -13,8 +13,6 @@ function formatDate(value) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
   }).format(new Date(value));
 }
 
@@ -26,7 +24,6 @@ function collectSkills(resumeData) {
   return uniqueStrings([
     ...(resumeData?.technicalSkills || []),
     ...(resumeData?.skills || []),
-    ...(resumeData?.softSkills || []),
     ...(resumeData?.languages || []),
     ...(resumeData?.frameworks || []),
     ...(resumeData?.databases || []),
@@ -71,11 +68,11 @@ function normalizeProject(item) {
 
 function AnalysisCard({ analysis, active, onClick }) {
   const resumeData = analysis?.resume_data || {};
-  const candidateName = resumeData?.candidateName || resumeData?.name || 'Unknown candidate';
+  const candidateName = resumeData?.candidateName || 'Unknown';
   const overallScore = Number(resumeData?.overallScore) || Number(analysis?.overallScore) || 0;
   const hiringRecommendation = resumeData?.hiringRecommendation || 'No recommendation';
   const experienceLevel = resumeData?.experienceLevel || 'Not specified';
-  const email = resumeData?.email || '--';
+  const analysisDate = formatDate(analysis?.created_at);
 
   return (
     <button
@@ -87,11 +84,10 @@ function AnalysisCard({ analysis, active, onClick }) {
         <div className="space-y-2">
           <div>
             <p className="text-base font-semibold text-[#F1F1F3]">{candidateName}</p>
-            <p className="text-sm text-[#8B8B9E]">{email}</p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-[#8B8B9E]">
             <span className="rounded-full border border-white/10 px-3 py-1">{experienceLevel}</span>
-            <span className="rounded-full border border-white/10 px-3 py-1">{formatDate(analysis?.created_at)}</span>
+            <span className="rounded-full border border-white/10 px-3 py-1">{analysisDate}</span>
           </div>
         </div>
 
@@ -183,7 +179,7 @@ export default function HistoryPage() {
   );
 
   const resumeData = selectedAnalysis?.resume_data || {};
-  const selectedSkills = collectSkills(resumeData);
+  const selectedTechnicalSkills = collectSkills(resumeData);
   const selectedExperience = Array.isArray(resumeData?.workExperience)
     ? resumeData.workExperience.map(normalizeExperience)
     : Array.isArray(resumeData?.experience)
@@ -199,6 +195,7 @@ export default function HistoryPage() {
   const selectedAreasToImprove = Array.isArray(resumeData?.areasToImprove) ? resumeData.areasToImprove : [];
   const overallScore = Number(resumeData?.overallScore) || Number(selectedAnalysis?.overallScore) || 0;
   const hiringRecommendation = resumeData?.hiringRecommendation || 'No recommendation saved.';
+  const profileSummary = String(resumeData?.profileSummary || resumeData?.summary || '').trim();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -258,12 +255,17 @@ export default function HistoryPage() {
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4">
+                  <p className="text-sm font-semibold text-[#F1F1F3]">Profile summary</p>
+                  <p className="mt-2 text-sm leading-6 text-[#D8D8E0]">{profileSummary || 'No profile summary was saved in this analysis.'}</p>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4">
                   <p className="text-sm font-semibold text-[#F1F1F3]">Hiring recommendation</p>
                   <p className="mt-2 text-sm text-[#8B8B9E]">{hiringRecommendation}</p>
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  <SectionPills title="All skills" items={selectedSkills} emptyMessage="No skills were saved in this analysis." />
+                  <SectionPills title="Technical skills" items={selectedTechnicalSkills} emptyMessage="No technical skills were saved in this analysis." />
 
                   <SectionList
                     title="Work experience"
