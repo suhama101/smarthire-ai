@@ -1,6 +1,6 @@
 // REQUIRED ENV VAR: GROQ_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Gemini API key from https://aistudio.google.com/apikey
+// Value: your Groq API key from https://console.groq.com/
 
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
@@ -46,7 +46,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Gemini response did not contain valid JSON.');
+      throw new Error('Groq response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -152,7 +152,7 @@ ${String(jobDescription || '').trim()}`;
   const text = String(await analyzeWithGroq(prompt) || '').trim();
 
   if (!text) {
-    throw new Error('Gemini returned an empty response.');
+    throw new Error('Groq returned an empty response.');
   }
 
   return normalizeMatchData(parseJsonResponse(text));
@@ -197,7 +197,7 @@ export async function POST(request) {
     const status = Number(error?.status) || 500;
     const message = error?.message || 'Job matching failed.';
     const isAuthIssue = message.includes('GROQ_API_KEY');
-    const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
+    const isTemporary = /Groq request failed|empty response|invalid JSON/i.test(message);
 
     return NextResponse.json(
       {

@@ -126,7 +126,7 @@ function buildFallbackAnalysis(resumeText, jobTitle, jobDescription, fileName) {
       matchedSkills,
       missingSkills,
       recommendation: matchScore >= 75 ? 'Good Match' : matchScore >= 50 ? 'Weak Match' : 'Weak Match',
-      summary: 'Analysis completed using fallback matching because Gemini quota or parsing failed.',
+      summary: 'Analysis completed using fallback matching because Groq parsing failed.',
       overallScore: matchScore,
       hiringRecommendation: matchScore >= 75 ? 'Hire' : matchScore >= 50 ? 'Maybe' : 'Pass',
     },
@@ -286,7 +286,7 @@ nothing before or after the JSON object:
         try {
           const raw = await analyzeWithGroq(prompt);
           
-          console.log('RAW GEMINI RESPONSE:', raw.substring(0, 300));
+          console.log('RAW GROQ RESPONSE:', raw.substring(0, 300));
 
           // Multiple cleaning strategies
           let cleaned = raw

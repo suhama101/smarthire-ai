@@ -123,7 +123,7 @@ Match Score: ${Number(matchResult?.matchScore || 0)}`;
   const text = String(await analyzeWithGroq(prompt) || '').trim();
 
   if (!text) {
-    throw new Error('Gemini returned an empty response.');
+    throw new Error('Groq returned an empty response.');
   }
 
   return normalizeLearningPlan(parseJsonResponse(text));
