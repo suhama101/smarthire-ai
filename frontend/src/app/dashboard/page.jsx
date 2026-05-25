@@ -124,22 +124,15 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-          <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8B8B9E]">Candidate Workspace</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#F1F1F3] sm:text-4xl">Your resume analysis and learning plan hub</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8B8B9E]">
-              Analyze a resume, match it to a target role, and generate an improvement plan without the recruiter-only batch controls.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link href="/history" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0F0F13] px-4 py-2.5 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5">
-                <History className="h-4 w-4" />
-                Review My History
-              </Link>
-              <Link href="/" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90">
-                Back to Home
-              </Link>
-            </div>
-          </section>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/history" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0F0F13] px-4 py-2.5 text-sm font-semibold text-[#F1F1F3] transition hover:bg-white/5">
+              <History className="h-4 w-4" />
+              Review My History
+            </Link>
+            <Link href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] shadow-sm transition hover:bg-white/95">
+              Back to Home
+            </Link>
+          </div>
 
           <CandidateWorkbench />
         </div>
