@@ -1,9 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { generateGeminiContent } from '../lib/gemini-model.js';
+import { analyzeWithGroq } from '../lib/groqClient.js';
 
 const RESUME_TEXT_LIMIT = 24000;
 const JOB_DESCRIPTION_LIMIT = 6000;
-const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
+const GROQ_API_KEY = String(process.env.GROQ_API_KEY || '').trim();
 const DEBUG_AI_LOGS = process.env.SMART_HIRE_DEBUG_AI_LOGS !== '0';
 const FALLBACK_TECH_KEYWORDS = [
   { token: 'javascript', label: 'JavaScript' },
@@ -90,7 +89,7 @@ class ClaudeIntegrationError extends Error {
   }
 }
 
-let genAI;
+// groq client is used via analyzeWithGroq helper
 
 function logAiDebug(step, payload) {
   if (!DEBUG_AI_LOGS) {
@@ -110,22 +109,8 @@ function previewText(value, maxLength = 3000) {
   return `${text.slice(0, maxLength)}... [truncated ${text.length - maxLength} chars]`;
 }
 
-function getClient() {
-  const apiKey = GEMINI_API_KEY;
-
-  if (!apiKey || apiKey === 'your_key_here') {
-    throw new ClaudeIntegrationError('Missing GEMINI_API_KEY in backend .env', 500);
-  }
-
-  if (!genAI) {
-    genAI = new GoogleGenerativeAI(apiKey);
-  }
-
-  return genAI;
-}
-
-function isGeminiConfigured() {
-  const apiKey = GEMINI_API_KEY;
+function isGroqConfigured() {
+  const apiKey = GROQ_API_KEY;
   return Boolean(apiKey && apiKey !== 'your_key_here');
 }
 
@@ -270,20 +255,23 @@ function buildFallbackMatchResult(resumeData, jobDescription) {
   };
 }
 
-function getGeminiText(response) {
-  const responseText = response?.response?.text?.();
+function getModelText(input) {
+  // Accept either a raw text string (from Groq) or a response-like object
+  if (typeof input === 'string') {
+    return String(input || '').trim();
+  }
 
+  const responseText = input?.response?.text?.();
   if (typeof responseText === 'string' && responseText.trim()) {
     return responseText.trim();
   }
 
-  const directText = response?.text?.();
-
+  const directText = input?.text?.();
   if (typeof directText === 'string' && directText.trim()) {
     return directText.trim();
   }
 
-  const content = Array.isArray(response?.content) ? response.content : [];
+  const content = Array.isArray(input?.content) ? input.content : [];
   const textChunks = content
     .filter((item) => item && item.type === 'text' && typeof item.text === 'string')
     .map((item) => item.text.trim())
@@ -292,28 +280,21 @@ function getGeminiText(response) {
   return textChunks.join('\n').trim();
 }
 
-function parseGeminiJson(response) {
-  const text = getGeminiText(response);
+function parseModelJsonOrThrow(rawText) {
+  const text = String(rawText || '').replace(/```json|```/gi, '').trim();
 
   if (!text) {
-    throw new ClaudeIntegrationError('Gemini returned an empty response', 502);
+    throw new ClaudeIntegrationError('Model returned an empty response', 502);
   }
 
-  const clean = text.replace(/```json|```/gi, '').trim();
-
   try {
-    return JSON.parse(clean);
-  } catch (parseErr) {
-    const jsonMatch = clean.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch (nestedErr) {
-        throw new ClaudeIntegrationError('Gemini response was not valid JSON', 502);
-      }
+    return JSON.parse(text);
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new ClaudeIntegrationError('Model response did not contain JSON', 502);
     }
-
-    throw new ClaudeIntegrationError('Gemini response did not contain JSON', 502);
+    return JSON.parse(match[0]);
   }
 }
 
@@ -694,7 +675,7 @@ function mapAnthropicError(err) {
   }
 
   const status = Number(err?.status || err?.response?.status) || 502;
-  const message = err?.message || 'Gemini request failed';
+  const message = err?.message || 'Groq request failed';
   return new ClaudeIntegrationError(message, status);
 }
 
@@ -761,19 +742,19 @@ ${promptResumeText}`;
       promptPreview: previewText(prompt, 4000),
     });
 
-    const response = await generateGeminiContent(
-      getClient(),
-      `You are a deterministic resume parser. Return exactly one JSON object matching the requested schema, based only on provided evidence, with no hallucinations.\n\n${prompt}`
-    );
+    const responseText = await analyzeWithGroq(`You are a deterministic resume parser. Return exactly one JSON object matching the requested schema, based only on provided evidence, with no hallucinations.\n\n${prompt}`);
 
-    logAiDebug('Resume Gemini raw response', {
-      text: getGeminiText(response),
+    logAiDebug('Resume Groq raw response', {
+      text: getModelText(responseText),
     });
 
-    const parsedResume = parseModelJsonOrFallback(response, {
-      flowName: 'resume-analysis',
-      fallbackFactory: () => buildFallbackResumeData(resumeText),
-    });
+    let parsedResume;
+    try {
+      parsedResume = parseModelJsonOrThrow(getModelText(responseText));
+    } catch (err) {
+      parsedResume = buildFallbackResumeData(resumeText);
+    }
+
     const normalized = normalizeResumeData(parsedResume);
     validateResumeDataShape(normalized);
     logAiDebug('Resume analysis parsed result', normalized);
@@ -845,19 +826,18 @@ Return this exact JSON:
       promptPreview: previewText(prompt, 4000),
     });
 
-    const response = await generateGeminiContent(
-      getClient(),
-      `You are a strict technical recruiter evaluator. Produce evidence-based scoring and return exactly one JSON object in the requested schema.\n\n${prompt}`
-    );
+    const responseText = await analyzeWithGroq(`You are a strict technical recruiter evaluator. Produce evidence-based scoring and return exactly one JSON object in the requested schema.\n\n${prompt}`);
 
-    logAiDebug('Match Gemini raw response', {
-      text: getGeminiText(response),
+    logAiDebug('Match Groq raw response', {
+      text: getModelText(responseText),
     });
 
-    const parsed = parseModelJsonOrFallback(response, {
-      flowName: 'job-match',
-      fallbackFactory: () => fallbackMatch,
-    });
+    let parsed;
+    try {
+      parsed = parseModelJsonOrThrow(getModelText(responseText));
+    } catch (err) {
+      parsed = fallbackMatch;
+    }
     const normalized = normalizeMatchResult(parsed, fallbackMatch);
     const finalMatch = {
       ...normalized,
@@ -943,20 +923,19 @@ Return JSON with exactly this structure:
       promptPreview: previewText(prompt, 4000),
     });
 
-    const response = await generateGeminiContent(
-      getClient(),
-      `You are a pragmatic engineering mentor. Produce a grounded, role-aligned learning plan and return exactly one JSON object in the requested schema.\n\n${prompt}`
-    );
+    const responseText = await analyzeWithGroq(`You are a pragmatic engineering mentor. Produce a grounded, role-aligned learning plan and return exactly one JSON object in the requested schema.\n\n${prompt}`);
 
-    logAiDebug('Learning plan Gemini raw response', {
-      text: getGeminiText(response),
+    logAiDebug('Learning plan Groq raw response', {
+      text: getModelText(responseText),
     });
 
     const fallbackPlan = buildFallbackLearningPlan(missingSkills, targetRole, currentLevel);
-    const parsed = parseModelJsonOrFallback(response, {
-      flowName: 'learning-plan',
-      fallbackFactory: () => fallbackPlan,
-    });
+    let parsed;
+    try {
+      parsed = parseModelJsonOrThrow(getModelText(responseText));
+    } catch (err) {
+      parsed = fallbackPlan;
+    }
     const normalized = normalizeLearningPlan(parsed, fallbackPlan);
     logAiDebug('Learning plan parsed result', normalized);
     return normalized;
@@ -965,4 +944,4 @@ Return JSON with exactly this structure:
   }
 }
 
-export { isGeminiConfigured, isGeminiConfigured as isAnthropicConfigured, isMeaningfulJobDescription };
+export { isGroqConfigured, isGroqConfigured as isAnthropicConfigured, isMeaningfulJobDescription };
