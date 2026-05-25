@@ -1,0 +1,12 @@
+# Vercel ignore patterns for monorepo
+
+backend/
+node_modules/
+.git/
+.gitignore
+README.md
+TESTING.md
+.env.local
+.env.*.local
+
+# Keep only frontend for deployment
