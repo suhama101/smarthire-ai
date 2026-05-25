@@ -1,1 +1,13 @@
-{}
+{
+	"name": "smarthire-ai",
+	"version": "1.0.0",
+	"description": "Enterprise hiring intelligence platform - monorepo with frontend and backend",
+	"private": true,
+	"workspaces": [
+		"frontend",
+		"backend"
+	],
+	"engines": {
+		"node": ">=18.0.0"
+	}
+}
