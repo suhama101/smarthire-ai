@@ -589,7 +589,7 @@ function extractFallbackProfile(resumeText) {
   });
 }
 
-async function analyzeWithGroq(resumeText) {
+async function analyzeResumeWithGroq(resumeText) {
   const localResumeText = String(resumeText || '').trim();
   if (!String(process.env.GROQ_API_KEY || '').trim()) {
     if (localResumeText) {
@@ -681,7 +681,7 @@ export async function POST(request) {
     }
 
     const markdownResume = await convertToMarkdown(extractedText);
-    const analysis = await analyzeWithGroq(extractedText);
+    const analysis = await analyzeResumeWithGroq(extractedText);
 
     if (analysis instanceof Response) {
       return analysis;

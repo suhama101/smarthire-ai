@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { analyzeWithGroq } from '../../../../src/lib/groqClient';
+import { analyzeWithGroq } from '../../../src/lib/groqClient';
 import PDFParser from 'pdf2json';
 
 export const runtime = 'nodejs';
