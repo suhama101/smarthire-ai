@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { loadHistoryFromSupabase } from '../../src/lib/history-store';
-import { getSupabaseClient } from '../../src/services/supabaseClient.js';
+import { loadHistoryFromSupabase } from '@/lib/history-store';
+import { getSupabaseClient } from '@/services/supabaseClient.js';
 
 function formatDate(value) {
   if (!value) {
