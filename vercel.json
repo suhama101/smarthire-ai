@@ -1,7 +1,7 @@
 {
+  "buildCommand": "npm install --prefix frontend && npm run build --prefix frontend",
+  "installCommand": "npm install --prefix frontend",
   "framework": "nextjs",
-  "installCommand": "cd frontend && npm install",
-  "buildCommand": "cd frontend && npm run build",
   "crons": [
     {
       "path": "/api/cron/ping",
