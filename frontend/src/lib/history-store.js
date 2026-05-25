@@ -1,3 +1,5 @@
+import { getSupabaseClient } from '../services/supabaseClient.js';
+
 const STORAGE_KEY = 'smarthire_history';
 
 function safeParse(value, fallback) {
@@ -51,6 +53,24 @@ export function readHistory() {
   }
 
   return history;
+}
+
+export async function loadHistoryFromSupabase(userId) {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('analyses')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('History load error:', error);
+    return [];
+  }
+
+  return data || [];
 }
 
 export function saveHistory(history) {
