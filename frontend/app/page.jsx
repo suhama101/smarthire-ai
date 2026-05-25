@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
+import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
 
@@ -65,43 +65,9 @@ function normalizeErrorMessage(error, fallbackMessage = 'Something went wrong. P
 
 export default function LandingPage() {
   const [session, setSession] = useState(null);
-  const [healthState, setHealthState] = useState({ status: 'checking', label: 'Checking API...' });
 
   useEffect(() => {
     setSession(readStoredAuth());
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
-
-    async function checkHealth() {
-      try {
-        const response = await fetch('/api/health', {
-          method: 'GET',
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          throw new Error(`Health check failed with status ${response.status}`);
-        }
-
-        await response.json();
-        setHealthState({ status: 'online', label: 'Online' });
-      } catch {
-        setHealthState({ status: 'offline', label: 'Offline' });
-      } finally {
-        window.clearTimeout(timeout);
-      }
-    }
-
-    checkHealth();
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeout);
-    };
   }, []);
 
   return (
@@ -173,39 +139,6 @@ export default function LandingPage() {
             </div>
           </section>
 
-          <section className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-            <article className="rounded-[2rem] border border-white/10 bg-[#111118] p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">System Health</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">Live API status</h2>
-                </div>
-                <span
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
-                    healthState.status === 'online'
-                      ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                      : healthState.status === 'offline'
-                        ? 'border-rose-300/30 bg-rose-500/10 text-rose-200'
-                        : 'border-amber-300/30 bg-amber-500/10 text-amber-100'
-                  }`}
-                >
-                  {healthState.status === 'online' ? <Wifi className="h-3.5 w-3.5" /> : healthState.status === 'offline' ? <WifiOff className="h-3.5 w-3.5" /> : <span className="h-2 w-2 rounded-full bg-current" />}
-                  {healthState.label}
-                </span>
-              </div>
-              <p className="mt-4 text-sm leading-6 text-[#B7B7C6]">
-                This checks <span className="font-medium text-white">/api/health</span> directly from the browser, so the homepage reflects the deployed Vercel runtime instead of a cached placeholder.
-              </p>
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-[#B7B7C6]">
-                {healthState.status === 'online'
-                  ? 'The API is responding normally and production routes should be reachable.'
-                  : healthState.status === 'offline'
-                    ? 'The API did not respond in time. Check the deployment or route logs.'
-                    : 'Waiting for the initial health response...'}
-              </div>
-            </article>
-          </section>
-
           <section id="features" className="mt-16">
             <div className="flex items-end justify-between gap-6">
               <div>
@@ -249,8 +182,6 @@ export default function LandingPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Navigation</p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {[
-                  { label: 'Dashboard', href: '/dashboard', text: 'Open the recruiter overview and candidate workbench.' },
-                  { label: 'Batch Upload', href: '/batch', text: 'Process multiple resumes against one role at a time.' },
                   { label: 'History', href: '/history', text: 'Review analyses and batch runs stored for this session.' },
                   { label: 'Login', href: '/login', text: 'Sign in to access protected routes.' },
                 ].map((link) => (
@@ -262,6 +193,44 @@ export default function LandingPage() {
               </div>
             </div>
           </section>
+
+          <footer style={{
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+            padding: '40px 24px',
+            marginTop: '80px',
+            textAlign: 'center',
+            color: 'rgba(255,255,255,0.4)',
+            fontSize: '14px',
+          }}>
+            <div style={{
+              maxWidth: '1200px',
+              margin: '0 auto',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px',
+            }}>
+              <div>
+                <strong style={{ color: 'white' }}>SmartHire AI</strong>
+                <span> — Enterprise hiring intelligence</span>
+              </div>
+              <div style={{ display: 'flex', gap: '24px' }}>
+                <a href="/login" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Login
+                </a>
+                <a href="/signup" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Signup
+                </a>
+                <a href="/dashboard" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Dashboard
+                </a>
+              </div>
+              <div>
+                © 2025 SmartHire AI. All rights reserved.
+              </div>
+            </div>
+          </footer>
       </div>
     </div>
   );
