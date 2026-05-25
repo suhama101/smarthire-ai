@@ -1,4 +1,4 @@
-// REQUIRED ENV VAR: GEMINI_API_KEY
+// REQUIRED ENV VAR: GROQ_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
 // Value: your Gemini API key from https://aistudio.google.com/apikey
 
@@ -6,9 +6,8 @@ import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
 import { Readable } from 'node:stream';
 import PDFParser from 'pdf2json';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { analyzeWithGroq } from '../../../../src/lib/groqClient';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
-import { generateGeminiContent } from '../../../../src/lib/gemini-model';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
@@ -16,7 +15,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const MAX_RESUME_SIZE_BYTES = 4 * 1024 * 1024;
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Using Groq via analyzeWithGroq from src/lib/groqClient
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_REGEX = /(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3}\)?[\s-]?)\d{3}[\s-]?\d{4}/g;
@@ -123,7 +122,7 @@ async function extractTextFromUpload(upload) {
 async function convertToMarkdown(rawText) {
   const normalizedText = String(rawText || '').trim();
 
-  if (process.env.NODE_ENV === 'test' || !String(process.env.GEMINI_API_KEY || '').trim()) {
+  if (process.env.NODE_ENV === 'test' || !String(process.env.GROQ_API_KEY || '').trim()) {
     return normalizedText;
   }
 
@@ -137,8 +136,8 @@ Return ONLY the markdown text, nothing else.
 RESUME TEXT:
 ${normalizedText.substring(0, 4000)}`;
 
-  const result = await generateGeminiContent(genAI, mdPrompt);
-  return String(result?.response?.text?.() || '').trim() || normalizedText;
+  const resultText = await analyzeWithGroq(mdPrompt);
+  return String(resultText || '').trim() || normalizedText;
 }
 
 function buildAnalysisPrompt(extractedText) {
@@ -590,26 +589,20 @@ function extractFallbackProfile(resumeText) {
   });
 }
 
-function extractGeminiText(response) {
-  return String(response?.text?.() || response?.response?.text?.() || '').trim();
-}
-
-async function analyzeWithGemini(resumeText) {
+async function analyzeWithGroq(resumeText) {
   const localResumeText = String(resumeText || '').trim();
-
-  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
+  if (!String(process.env.GROQ_API_KEY || '').trim()) {
     if (localResumeText) {
       return extractFallbackProfile(localResumeText);
     }
-
-    const error = new Error('GEMINI_API_KEY not set');
-    console.error('[resume/analyze] Missing GEMINI_API_KEY');
+    const error = new Error('GROQ_API_KEY not set');
+    console.error('[resume/analyze] Missing GROQ_API_KEY');
     error.status = 500;
     throw error;
   }
 
-  const geminiResult = await generateGeminiContent(genAI, [buildAnalysisPrompt(localResumeText)]);
-  const raw = geminiResult.response.text();
+  const rawResponse = await analyzeWithGroq(buildAnalysisPrompt(localResumeText));
+  const raw = String(rawResponse || '');
   const firstBrace = raw.indexOf("{");
   const lastBrace = raw.lastIndexOf("}");
   const cleaned = raw.substring(firstBrace, lastBrace + 1);
@@ -688,7 +681,7 @@ export async function POST(request) {
     }
 
     const markdownResume = await convertToMarkdown(extractedText);
-    const analysis = await analyzeWithGemini(extractedText);
+    const analysis = await analyzeWithGroq(extractedText);
 
     if (analysis instanceof Response) {
       return analysis;

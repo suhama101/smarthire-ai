@@ -1,18 +1,17 @@
-// REQUIRED ENV VAR: GEMINI_API_KEY
+// REQUIRED ENV VAR: GROQ_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
 // Value: your Gemini API key from https://aistudio.google.com/apikey
 
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
-import { generateGeminiContent } from '../../../../src/lib/gemini-model';
+import { analyzeWithGroq } from '../../../../src/lib/groqClient';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Using analyzeWithGroq from src/lib/groqClient
 const JOB_SKILL_KEYWORDS = [
   'javascript', 'typescript', 'react', 'next.js', 'node.js', 'express', 'python', 'java', 'sql', 'postgresql',
   'mysql', 'mongodb', 'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'html', 'css',
@@ -125,7 +124,7 @@ function buildFallbackMatch(candidateProfile, resumeText, jobDescription) {
     matchScore,
     matchedSkills,
     missingSkills,
-    summary: 'Fallback analysis used because GEMINI_API_KEY is not configured.',
+    summary: 'Fallback analysis used because GROQ_API_KEY is not configured.',
     recommendation: matchScore >= 80 ? 'Strong Match' : matchScore >= 60 ? 'Good Match' : 'Weak Match',
   });
 }
@@ -133,7 +132,7 @@ function buildFallbackMatch(candidateProfile, resumeText, jobDescription) {
 async function analyzeMatch(candidateProfile, resumeText, jobDescription) {
   const normalizedResumeText = buildResumeText(candidateProfile, resumeText);
 
-  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
+  if (!String(process.env.GROQ_API_KEY || '').trim()) {
     return buildFallbackMatch(candidateProfile, normalizedResumeText, jobDescription);
   }
 
@@ -150,8 +149,7 @@ ${normalizedResumeText}
 Job Description:
 ${String(jobDescription || '').trim()}`;
 
-  const result = await generateGeminiContent(genAI, prompt);
-  const text = String(result?.response?.text?.() || '').trim();
+  const text = String(await analyzeWithGroq(prompt) || '').trim();
 
   if (!text) {
     throw new Error('Gemini returned an empty response.');
@@ -198,7 +196,7 @@ export async function POST(request) {
   } catch (error) {
     const status = Number(error?.status) || 500;
     const message = error?.message || 'Job matching failed.';
-    const isAuthIssue = message.includes('GEMINI_API_KEY');
+    const isAuthIssue = message.includes('GROQ_API_KEY');
     const isTemporary = /Gemini request failed|empty response|invalid JSON/i.test(message);
 
     return NextResponse.json(
@@ -206,7 +204,7 @@ export async function POST(request) {
         error: isTemporary
             ? 'AI analysis temporarily unavailable. Please try again in a moment.'
             : isAuthIssue
-              ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
+              ? 'Server configuration error. Contact admin to set GROQ_API_KEY in Vercel.'
               : 'Job matching failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }

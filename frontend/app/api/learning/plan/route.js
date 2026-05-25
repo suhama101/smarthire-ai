@@ -1,18 +1,17 @@
-// REQUIRED ENV VAR: GEMINI_API_KEY
+// REQUIRED ENV VAR: GROQ_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Gemini API key from https://aistudio.google.com/apikey
+// Value: your Groq API key from https://console.groq.com/
 
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit } from '../../../../src/lib/rate-limit';
-import { generateGeminiContent } from '../../../../src/lib/gemini-model';
+import { analyzeWithGroq } from '../../../../src/lib/groqClient';
 import { sanitizeText } from '../../../../src/lib/input-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Using Groq via analyzeWithGroq from src/lib/groqClient
 
 function dedupeStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
@@ -27,7 +26,7 @@ function parseJsonResponse(text) {
     const match = cleanText.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      throw new Error('Gemini response did not contain valid JSON.');
+      throw new Error('Groq response did not contain valid JSON.');
     }
 
     return JSON.parse(match[0]);
@@ -106,7 +105,7 @@ function buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, m
 }
 
 async function generateLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult) {
-  if (!String(process.env.GEMINI_API_KEY || '').trim()) {
+  if (!String(process.env.GROQ_API_KEY || '').trim()) {
     return buildFallbackLearningPlan(candidateProfile, jobTitle, jobDescription, matchResult);
   }
 
@@ -121,8 +120,7 @@ Job Title: ${String(jobTitle || '').trim()}
 Missing Skills: ${JSON.stringify(matchResult?.missingSkills || [])}
 Match Score: ${Number(matchResult?.matchScore || 0)}`;
 
-  const result = await generateGeminiContent(genAI, prompt);
-  const text = String(result?.response?.text?.() || '').trim();
+  const text = String(await analyzeWithGroq(prompt) || '').trim();
 
   if (!text) {
     throw new Error('Gemini returned an empty response.');
@@ -173,8 +171,8 @@ export async function POST(request) {
 
     return NextResponse.json(
       {
-        error: message.includes('GEMINI_API_KEY')
-          ? 'Server configuration error. Contact admin to set GEMINI_API_KEY in Vercel.'
+            error: message.includes('GROQ_API_KEY')
+              ? 'Server configuration error. Contact admin to set GROQ_API_KEY in Vercel.'
           : 'Learning plan generation failed. Please try again.',
       },
       { status: status >= 400 ? status : 500 }

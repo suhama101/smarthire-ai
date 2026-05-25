@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { analyzeWithGroq } from '../../../../src/lib/groqClient';
 import PDFParser from 'pdf2json';
 
 export const runtime = 'nodejs';
@@ -137,8 +137,8 @@ function buildFallbackAnalysis(resumeText, jobTitle, jobDescription, fileName) {
 export async function POST(req) {
   try {
     console.log('=== BATCH ROUTE REACHED ===');
-    console.log('GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
-    console.log('GEMINI_MODEL:', process.env.GEMINI_MODEL);
+    console.log('GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY);
+    console.log('GROQ_MODEL:', process.env.GROQ_MODEL);
 
     let formData;
     try {
@@ -171,24 +171,15 @@ export async function POST(req) {
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GROQ_API_KEY) {
       return NextResponse.json(
         {
           success: false,
-          error: 'GEMINI_API_KEY not configured',
+          error: 'GROQ_API_KEY not configured',
         },
         { status: 500 }
       );
     }
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
-      generationConfig: {
-        maxOutputTokens: 1000,
-        temperature: 0.1,
-      },
-    });
 
     const results = [];
 
@@ -293,8 +284,7 @@ nothing before or after the JSON object:
         const fallbackResult = buildFallbackAnalysis(extractedText, jobTitle, jobDescription, fileName);
 
         try {
-          const result = await model.generateContent(prompt);
-          const raw = result.response.text();
+          const raw = await analyzeWithGroq(prompt);
           
           console.log('RAW GEMINI RESPONSE:', raw.substring(0, 300));
 

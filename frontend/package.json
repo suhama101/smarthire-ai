@@ -13,12 +13,12 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.14.0",
     "bcryptjs": "^3.0.3",
     "busboy": "latest",
     "formidable": "^3.0.0",
+    "groq-sdk": "^0.3.0",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.2",
