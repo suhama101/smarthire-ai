@@ -129,7 +129,7 @@ export default function DashboardPage() {
               <History className="h-4 w-4" />
               Review My History
             </Link>
-            <Link href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] shadow-sm transition hover:bg-white/95">
+            <Link href="/" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90">
               Back to Home
             </Link>
           </div>
