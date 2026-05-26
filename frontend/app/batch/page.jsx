@@ -257,17 +257,11 @@ function ResultRow({ row, expanded, onToggle }) {
                     <p className="mt-2 text-sm text-[#F1F1F3]">{(row.matchedSkills || []).length ? row.matchedSkills.join(', ') : 'None'}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3">
-                            ['PDF', 'pdf'],
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Missing Skills</p>
                     <p className="mt-2 text-sm text-[#F1F1F3]">{(row.missingSkills || []).length ? row.missingSkills.join(', ') : 'None'}</p>
-                              {key === 'pdf' ? (
-                                <span className="inline-flex items-center gap-2 font-semibold">{label}</span>
-                              ) : (
-                                <button type="button" onClick={() => setSortConfig((current) => current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: key === 'matchScore' ? 'desc' : 'asc' })} className="inline-flex items-center gap-2 font-semibold">
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3 sm:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Experience</p>
-                                </button>
-                              )}
+                    <p className="mt-2 text-sm text-[#F1F1F3]">
                       {(row.profile?.experience || []).length
                         ? row.profile.experience.map((item) => [item.title, item.company, item.duration].filter(Boolean).join(' • ')).join(' | ')
                         : 'No experience details extracted.'}
@@ -935,21 +929,43 @@ export default function BatchResumeUploadPage() {
                     <table className="min-w-full divide-y divide-white/10 text-left text-sm">
                       <thead className="bg-[#0F0F13] text-xs uppercase tracking-[0.16em] text-[#8B8B9E]">
                         <tr>
-                          {[
-                            ['Rank', 'rank'],
-                            ['Candidate Name', 'candidateName'],
-                            ['Match Score', 'matchScore'],
-                            ['Matched Skills', 'matchedSkills'],
-                            ['Missing Skills', 'missingSkills'],
-                            ['Recommendation', 'recommendation'],
-                          ].map(([label, key]) => (
-                            <th key={key} className="px-4 py-3 font-semibold">
-                              <button type="button" onClick={() => setSortConfig((current) => current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: key === 'matchScore' ? 'desc' : 'asc' })} className="inline-flex items-center gap-2 font-semibold">
-                                {label}
-                                {sortConfig.key === key ? sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" /> : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
-                              </button>
-                            </th>
-                          ))}
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('rank')} className="inline-flex items-center gap-2 font-semibold">
+                              Rank
+                              {sortConfig.key === 'rank' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('candidateName')} className="inline-flex items-center gap-2 font-semibold">
+                              Candidate Name
+                              {sortConfig.key === 'candidateName' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('matchScore')} className="inline-flex items-center gap-2 font-semibold">
+                              Match Score
+                              {sortConfig.key === 'matchScore' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('matchedSkills')} className="inline-flex items-center gap-2 font-semibold">
+                              Matched Skills
+                              {sortConfig.key === 'matchedSkills' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('missingSkills')} className="inline-flex items-center gap-2 font-semibold">
+                              Missing Skills
+                              {sortConfig.key === 'missingSkills' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            <button type="button" onClick={() => toggleSort('recommendation')} className="inline-flex items-center gap-2 font-semibold">
+                              Recommendation
+                              {sortConfig.key === 'recommendation' ? (sortConfig.direction === 'asc' ? <ArrowUpAZ className="h-3.5 w-3.5" /> : <ArrowDownAZ className="h-3.5 w-3.5" />) : <ArrowUpAZ className="h-3.5 w-3.5 opacity-30" />}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 font-semibold">PDF</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/10 bg-[#1A1A24]">
