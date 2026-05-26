@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { analyzeWithGroq } from '../../../src/lib/groqClient';
 import PDFParser from 'pdf2json';
 
 export const runtime = 'nodejs';
@@ -222,132 +221,12 @@ export async function POST(req) {
           continue;
         }
 
-        const prompt = `You are a senior technical recruiter.
-Your job is to accurately match resumes to job requirements.
-
-CRITICAL MATCHING RULES:
-- Match skills flexibly and intelligently
-- "Next.js" = "Nextjs" = "NextJS" = "next js"
-- "Node.js" = "Nodejs" = "NodeJS" = "node js"  
-- "React.js" = "Reactjs" = "ReactJS" = "React"
-- "Express.js" = "Expressjs" = "Express js"
-- "JavaScript" = "Javascript" = "JS"
-- "TypeScript" = "Typescript" = "TS"
-- "C++" = "CPP" = "c plus plus"
-- "Machine Learning" = "ML"
-- "Artificial Intelligence" = "AI"
-- If a skill appears ANYWHERE in resume text, 
-  it counts as matched
-- Do NOT be strict - be intelligent and generous
-- Consider related skills as partial matches
-- Years of experience: estimate from dates in resume
-
-RESUME FULL TEXT:
-${extractedText.substring(0, 3000)}
-
-JOB TITLE: ${jobTitle}
-
-JOB DESCRIPTION (extract required skills from this):
-${jobDescription.substring(0, 500)}
-
-TASK:
-Step 1: Extract ALL skills mentioned anywhere in resume
-Step 2: Extract ALL skills required in job description
-Step 3: Match them using flexible rules above
-Step 4: Calculate matchScore as percentage
-
-matchScore calculation:
-- Count how many job-required skills exist in resume
-- matchScore = (matched / total required) * 100
-- Round to nearest 10
-- Minimum score is 10 if candidate has any relevant skills
-- If 8 out of 10 skills match = 80%
-- If 3 out of 10 skills match = 30%
-
-IMPORTANT: 
-- Never return 0% unless resume has zero relevant content
-- Never return 20% if most skills actually match
-- Be accurate and fair
-
-Return ONLY raw JSON, no markdown, no backticks, 
-nothing before or after the JSON object:
-
-{
-  "candidateName": "extract full name from first line of resume",
-  "email": "extract email from resume",
-  "phone": "extract phone from resume",
-  "experienceLevel": "Fresher or Junior or Mid-level or Senior",
-  "totalExperience": "estimated years e.g. 1 year",
-  "technicalSkills": [
-    "list ALL skills found anywhere in resume"
-  ],
-  "matchScore": 75,
-  "matchedSkills": [
-    "skills from job description found in resume"
-  ],
-  "missingSkills": [
-    "skills from job description NOT found in resume"
-  ],
-  "recommendation": "Strong Match or Good Match or Weak Match or No Match",
-  "summary": "2 sentences explaining why this candidate matches or not",
-  "overallScore": 75,
-  "hiringRecommendation": "Strong Hire or Hire or Maybe or Pass"
-}`;
-
-        let parsed = null;
         const fallbackResult = buildFallbackAnalysis(extractedText, jobTitle, jobDescription, fileName);
-
-        try {
-          const raw = await analyzeWithGroq(prompt);
-          
-          console.log('RAW GROQ RESPONSE:', raw.substring(0, 300));
-
-          // Multiple cleaning strategies
-          let cleaned = raw
-            .replace(/```json/gi, '')
-            .replace(/```/gi, '')
-            .trim();
-
-          // Find first { and last }
-          const firstBrace = cleaned.indexOf('{');
-          const lastBrace = cleaned.lastIndexOf('}');
-
-          if (firstBrace === -1 || lastBrace === -1) {
-            throw new Error('No JSON object found in response');
-          }
-
-          cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-
-          parsed = JSON.parse(cleaned);
-
-          // Ensure required fields exist with defaults
-          parsed.candidateName = parsed.candidateName || file.name.replace('.pdf', '');
-          parsed.matchScore = Number(parsed.matchScore) || 0;
-          parsed.overallScore = Number(parsed.overallScore) || 0;
-          parsed.technicalSkills = Array.isArray(parsed.technicalSkills) 
-            ? parsed.technicalSkills : [];
-          parsed.matchedSkills = Array.isArray(parsed.matchedSkills)
-            ? parsed.matchedSkills : [];
-          parsed.missingSkills = Array.isArray(parsed.missingSkills)
-            ? parsed.missingSkills : [];
-          parsed.recommendation = parsed.recommendation || 'Weak Match';
-          parsed.summary = parsed.summary || 'Analysis completed.';
-          parsed.hiringRecommendation = parsed.hiringRecommendation || 'Maybe';
-        } catch (parseErr) {
-          console.error('Parse error for', file.name, ':', parseErr.message);
-          results.push({
-            fileName: file.name,
-            success: true,
-            data: fallbackResult,
-            warning: 'Fallback analysis used: ' + parseErr.message,
-          });
-          continue;
-        }
 
         results.push({
           fileName,
           success: true,
-          data: normalizeResult(parsed, fileName),
+          data: normalizeResult(fallbackResult, fileName),
         });
       } catch (fileErr) {
         results.push({
