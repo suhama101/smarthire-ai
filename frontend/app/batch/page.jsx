@@ -493,7 +493,18 @@ export default function BatchResumeUploadPage() {
         body: formData,
       });
 
-      const responseData = await response.json();
+      const rawResponse = await response.text();
+      let responseData = null;
+
+      try {
+        responseData = rawResponse ? JSON.parse(rawResponse) : null;
+      } catch {
+        responseData = {
+          success: false,
+          error: rawResponse || response.statusText || 'Batch failed',
+        };
+      }
+
       console.log('Batch response:', responseData);
 
       if (!response.ok || !responseData.success) {
