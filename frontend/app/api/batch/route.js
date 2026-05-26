@@ -5,6 +5,7 @@ import PDFParser from 'pdf2json';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+const BATCH_SOFT_TIMEOUT_MS = 50000;
 
 async function extractTextFromPDF(buffer) {
   return new Promise((resolve) => {
@@ -136,6 +137,7 @@ function buildFallbackAnalysis(resumeText, jobTitle, jobDescription, fileName) {
 
 export async function POST(req) {
   try {
+    const startedAt = Date.now();
     console.log('=== BATCH ROUTE REACHED ===');
     console.log('GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY);
     const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
@@ -183,8 +185,19 @@ export async function POST(req) {
     }
 
     const results = [];
+    let timedOut = false;
 
     for (const file of files) {
+      if (Date.now() - startedAt > BATCH_SOFT_TIMEOUT_MS) {
+        timedOut = true;
+        results.push({
+          fileName: file?.name || 'Unknown file',
+          success: false,
+          error: 'Batch stopped early to avoid timing out. Try fewer files per run.',
+        });
+        break;
+      }
+
       try {
         const fileName = file.name;
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -336,8 +349,6 @@ nothing before or after the JSON object:
           success: true,
           data: normalizeResult(parsed, fileName),
         });
-
-        await new Promise((resolve) => setTimeout(resolve, 1500));
       } catch (fileErr) {
         results.push({
           fileName: file.name,
@@ -355,6 +366,7 @@ nothing before or after the JSON object:
       total: results.length,
       successful: successful.length,
       failed: results.length - successful.length,
+      timedOut,
     });
   } catch (err) {
     console.error('BATCH ROUTE ERROR:', err);
