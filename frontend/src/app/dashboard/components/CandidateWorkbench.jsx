@@ -104,6 +104,10 @@ function recommendationTone(value) {
   return 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
+function renderErrorMessage(error) {
+  return typeof error === 'string' ? error : 'Something went wrong. Please try again.';
+}
+
 export default function CandidateWorkbench() {
   const fileInputRef = useRef(null);
   const jobMatchApiUrl = `${getFrontendOrigin()}/api/analyze/match`;
@@ -279,7 +283,7 @@ export default function CandidateWorkbench() {
               clearAnalysisState(setAnalysisId, setResumeData, setResumeText, setAnalysisError, setMatchError, setMatchResult, setLearningPlan);
             }} />
           {selectedFile ? <p className="mt-3 text-sm text-[#F1F1F3]">Selected: {selectedFile.name}</p> : <p className="mt-3 text-sm text-[#8B8B9E]">Choose a PDF, DOCX, TXT, or MD resume.</p>}
-          {analysisError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{analysisError}</p> : null}
+          {analysisError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{renderErrorMessage(analysisError)}</p> : null}
           <button type="button" onClick={handleAnalyzeResume} disabled={!selectedFile || isAnalyzing} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
             <FileText className="h-4 w-4" />
             {isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}
@@ -303,7 +307,7 @@ export default function CandidateWorkbench() {
           <input value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#1A1A24] px-4 py-3 text-sm text-[#F1F1F3] outline-none" placeholder="Senior Frontend Engineer" />
           <label className="mt-4 block text-sm font-medium text-[#F1F1F3]">Job Description</label>
           <textarea value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} rows={8} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#1A1A24] px-4 py-3 text-sm text-[#F1F1F3] outline-none" placeholder="Paste the full role description here..." />
-          {matchError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{matchError}</p> : null}
+          {matchError ? <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{renderErrorMessage(matchError)}</p> : null}
           <button type="button" onClick={handleMatchJob} disabled={!resumeData || isMatching} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
             <Sparkles className="h-4 w-4" />
             {isMatching ? 'Matching...' : 'Match Job'}
