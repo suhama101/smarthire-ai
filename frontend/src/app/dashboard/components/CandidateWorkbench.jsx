@@ -134,10 +134,10 @@ export default function CandidateWorkbench() {
     setLearningPlan(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const supabase = getSupabaseClient({ allowMissing: true });
+      const session = supabase
+        ? (await supabase.auth.getSession())?.data?.session || null
+        : null;
 
       const formData = new FormData();
       formData.append('resume', selectedFile);
