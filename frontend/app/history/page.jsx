@@ -1,19 +1,47 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { loadHistoryFromSupabase } from '@/lib/history-store';
-import { getSupabaseClient } from '@/services/supabaseClient.js';
+import { useEffect, useState } from 'react';
+import { readStoredAuth } from '@/lib/auth-session';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
-function formatDate(value) {
-  if (!value) {
+function formatDate(dateStr) {
+  if (!dateStr) {
     return '--';
   }
 
-  return new Intl.DateTimeFormat('en-US', {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(value));
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getScoreColor(score) {
+  if (score >= 80) return '#22c55e';
+  if (score >= 60) return '#eab308';
+  return '#ef4444';
+}
+
+function getRecommendationBadge(rec) {
+  const colors = {
+    'Strong Hire': '#22c55e',
+    Hire: '#3b82f6',
+    Maybe: '#eab308',
+    Pass: '#ef4444',
+    'Review manually': '#6b7280',
+    'Strong Match': '#22c55e',
+    'Good Match': '#3b82f6',
+    'Weak Match': '#eab308',
+    'No Match': '#ef4444',
+  };
+
+  return colors[rec] || '#6b7280';
+}
+
+function normalizeText(value) {
+  return String(value || '').trim();
 }
 
 function uniqueStrings(values) {
@@ -66,267 +94,506 @@ function normalizeProject(item) {
   };
 }
 
-function AnalysisCard({ analysis, active, onClick }) {
+function analysisToCard(analysis) {
   const resumeData = analysis?.resume_data || {};
-  const candidateName = resumeData?.candidateName || 'Unknown';
-  const overallScore = Number(resumeData?.overallScore) || Number(analysis?.overallScore) || 0;
-  const hiringRecommendation = resumeData?.hiringRecommendation || 'No recommendation';
-  const experienceLevel = resumeData?.experienceLevel || 'Not specified';
-  const analysisDate = formatDate(analysis?.created_at);
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full rounded-3xl border p-5 text-left transition ${active ? 'border-[#6B4DFF]/60 bg-white/8' : 'border-white/10 bg-[#0F0F13] hover:bg-white/5'}`}
-    >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <div>
-            <p className="text-base font-semibold text-[#F1F1F3]">{candidateName}</p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-[#8B8B9E]">
-            <span className="rounded-full border border-white/10 px-3 py-1">{experienceLevel}</span>
-            <span className="rounded-full border border-white/10 px-3 py-1">{analysisDate}</span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 md:justify-end">
-          <span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-            {overallScore}%
-          </span>
-          <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-[#F1F1F3]">
-            {hiringRecommendation}
-          </span>
-        </div>
-      </div>
-    </button>
-  );
+  return {
+    ...analysis,
+    type: 'analyses',
+    title: resumeData?.candidateName || resumeData?.name || 'Unknown',
+    subtitle: resumeData?.email || 'No email',
+    score: Number(resumeData?.overallScore) || Number(analysis?.overallScore) || 0,
+    recommendation: resumeData?.hiringRecommendation || 'Review manually',
+    raw: analysis,
+  };
 }
 
-function SectionList({ title, items, emptyMessage, renderItem }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#15151C] p-4">
-      <p className="text-sm font-semibold text-[#F1F1F3]">{title}</p>
-      {items.length ? (
-        <div className="mt-3 space-y-3">
-          {items.map((item, index) => (
-            <div key={`${title}-${index}`} className="rounded-2xl border border-white/5 bg-[#101015] p-4 text-sm text-[#D8D8E0]">
-              {renderItem(item, index)}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-[#8B8B9E]">{emptyMessage}</p>
-      )}
-    </div>
-  );
-}
+function buildBatchSummary(rows) {
+  const grouped = new Map();
 
-function SectionPills({ title, items, emptyMessage }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#15151C] p-4">
-      <p className="text-sm font-semibold text-[#F1F1F3]">{title}</p>
-      {items.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {items.map((item) => (
-            <span key={item} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-[#D8D8E0]">
-              {item}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-[#8B8B9E]">{emptyMessage}</p>
-      )}
-    </div>
-  );
+  (rows || []).forEach((row) => {
+    const createdAt = row.created_at || row.createdAt || new Date().toISOString();
+    const bucketKey = [normalizeText(row.job_title), normalizeText(row.company_name), new Date(createdAt).toDateString()].join('::');
+
+    if (!grouped.has(bucketKey)) {
+      grouped.set(bucketKey, {
+        id: bucketKey,
+        type: 'batches',
+        jobTitle: normalizeText(row.job_title) || 'Batch Review',
+        companyName: normalizeText(row.company_name) || 'Recruiter Batch',
+        created_at: createdAt,
+        results: [],
+      });
+    }
+
+    const entry = grouped.get(bucketKey);
+    const matchResult = row.match_result && typeof row.match_result === 'object' ? row.match_result : {};
+    const candidateName = normalizeText(
+      matchResult?.candidateName || matchResult?.name || row.candidate_name || row.candidateName || row.file_name || 'Candidate'
+    );
+    const score = Number(matchResult?.matchScore ?? matchResult?.overallScore ?? row.match_score ?? row.matchScore) || 0;
+
+    entry.results.push({
+      candidateName,
+      matchScore: score,
+      recommendation: normalizeText(matchResult?.recommendation || row.recommendation || 'Review manually'),
+      matchedSkills: Array.isArray(matchResult?.matchedSkills) ? matchResult.matchedSkills : [],
+      missingSkills: Array.isArray(matchResult?.missingSkills) ? matchResult.missingSkills : [],
+      summary: normalizeText(matchResult?.summary),
+      email: normalizeText(matchResult?.email),
+      phone: normalizeText(matchResult?.phone),
+      profile: matchResult?.profile && typeof matchResult.profile === 'object' ? matchResult.profile : null,
+    });
+  });
+
+  return Array.from(grouped.values())
+    .map((batch) => {
+      const scores = batch.results.map((item) => Number(item.matchScore) || 0);
+      const averageScore = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : 0;
+      const topCandidate = [...batch.results].sort((left, right) => Number(right.matchScore) - Number(left.matchScore))[0]?.candidateName || '--';
+
+      return {
+        ...batch,
+        averageScore,
+        totalResumes: batch.results.length,
+        topCandidate,
+        recommendation: averageScore >= 80 ? 'Strong Hire' : averageScore >= 60 ? 'Hire' : averageScore >= 40 ? 'Maybe' : 'Pass',
+      };
+    })
+    .sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 }
 
 export default function HistoryPage() {
   const [analyses, setAnalyses] = useState([]);
-  const [selectedAnalysisId, setSelectedAnalysisId] = useState('');
+  const [batches, setBatches] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('analyses');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const supabase = getSupabaseClient();
-        const authResult = supabase.auth?.getUser ? await supabase.auth.getUser() : { data: { user: null } };
-        const user = authResult?.data?.user;
-
-        if (!user) {
-          setAnalyses([]);
-          return;
-        }
-
-        const history = await loadHistoryFromSupabase(user.id);
-        setAnalyses(history);
-        setSelectedAnalysisId((current) => current || history[0]?.id || '');
-      } catch (err) {
-        console.error('History error:', err);
-        setAnalyses([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedAnalysis = useMemo(
-    () => analyses.find((entry) => entry.id === selectedAnalysisId) || analyses[0] || null,
-    [analyses, selectedAnalysisId],
-  );
+  async function loadHistory() {
+    try {
+      setLoading(true);
 
-  const resumeData = selectedAnalysis?.resume_data || {};
-  const selectedTechnicalSkills = collectSkills(resumeData);
-  const selectedExperience = Array.isArray(resumeData?.workExperience)
-    ? resumeData.workExperience.map(normalizeExperience)
-    : Array.isArray(resumeData?.experience)
-      ? resumeData.experience.map(normalizeExperience)
+      const stored = readStoredAuth();
+      const userId = stored?.user?.id || stored?.user?.user_id || stored?.user?.email || '';
+      const supabase = getSupabaseClient();
+
+      if (!userId) {
+        setAnalyses([]);
+        setBatches([]);
+        setSelected(null);
+        return;
+      }
+
+      const [analysisResponse, batchResponse] = await Promise.all([
+        supabase
+          .from('analyses')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('job_matches')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ]);
+
+      const nextAnalyses = !analysisResponse.error && Array.isArray(analysisResponse.data) ? analysisResponse.data : [];
+      const nextBatches = !batchResponse.error && Array.isArray(batchResponse.data) ? buildBatchSummary(batchResponse.data) : [];
+
+      setAnalyses(nextAnalyses);
+      setBatches(nextBatches);
+
+      setSelected((current) => {
+        if (current && current.type === activeTab) {
+          return current;
+        }
+
+        if (activeTab === 'analyses') {
+          return nextAnalyses.length ? analysisToCard(nextAnalyses[0]) : null;
+        }
+
+        return nextBatches.length ? nextBatches[0] : null;
+      });
+    } catch (err) {
+      console.error('History load error:', err);
+      setAnalyses([]);
+      setBatches([]);
+      setSelected(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const currentItems = activeTab === 'analyses' ? analyses.map(analysisToCard) : batches;
+  const filtered = currentItems.filter((item) => {
+    const haystack = activeTab === 'analyses'
+      ? [item.title, item.subtitle, item.recommendation].join(' ').toLowerCase()
+      : [item.jobTitle, item.companyName, item.topCandidate].join(' ').toLowerCase();
+
+    return haystack.includes(searchQuery.toLowerCase());
+  });
+
+  const selectedItem = selected && selected.type === activeTab
+    ? selected
+    : filtered[0] || null;
+
+  function renderAnalysisDetail(item) {
+    const resumeData = item?.raw?.resume_data || {};
+    const overallScore = Number(resumeData?.overallScore) || Number(item?.score) || 0;
+    const hiringRecommendation = resumeData?.hiringRecommendation || item?.recommendation || 'Review manually';
+    const profileSummary = String(resumeData?.profileSummary || resumeData?.summary || '').trim();
+    const selectedTechnicalSkills = collectSkills(resumeData);
+    const selectedExperience = Array.isArray(resumeData?.workExperience)
+      ? resumeData.workExperience.map(normalizeExperience)
+      : Array.isArray(resumeData?.experience)
+        ? resumeData.experience.map(normalizeExperience)
+        : [];
+    const selectedEducation = Array.isArray(resumeData?.education)
+      ? resumeData.education.map(normalizeEducation)
       : [];
-  const selectedEducation = Array.isArray(resumeData?.education)
-    ? resumeData.education.map(normalizeEducation)
-    : [];
-  const selectedProjects = Array.isArray(resumeData?.projects)
-    ? resumeData.projects.map(normalizeProject)
-    : [];
-  const selectedStrengths = Array.isArray(resumeData?.strengths) ? resumeData.strengths : [];
-  const selectedAreasToImprove = Array.isArray(resumeData?.areasToImprove) ? resumeData.areasToImprove : [];
-  const overallScore = Number(resumeData?.overallScore) || Number(selectedAnalysis?.overallScore) || 0;
-  const hiringRecommendation = resumeData?.hiringRecommendation || 'No recommendation saved.';
-  const profileSummary = String(resumeData?.profileSummary || resumeData?.summary || '').trim();
+    const selectedProjects = Array.isArray(resumeData?.projects)
+      ? resumeData.projects.map(normalizeProject)
+      : [];
+    const selectedStrengths = Array.isArray(resumeData?.strengths) ? resumeData.strengths : [];
+    const selectedAreasToImprove = Array.isArray(resumeData?.areasToImprove) ? resumeData.areasToImprove : [];
 
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="rounded-[2rem] border border-white/10 bg-[#15151C] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] sm:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Session history</p>
-            <h1 className="mt-2 text-3xl font-semibold text-[#F1F1F3]">Your analyses</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#8B8B9E]">
-              Loaded directly from Supabase so the history stays aligned with saved analysis records.
-            </p>
+    return (
+      <div>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Selected analysis</p>
+        <h2 style={{ fontSize: '22px', fontWeight: '700', margin: '0 0 4px' }}>{resumeData?.candidateName || resumeData?.name || 'Resume analysis'}</h2>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0 0 12px' }}>
+          {resumeData?.email || '--'} • {formatDate(item?.raw?.created_at || item?.created_at)}
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 16px', borderRadius: '8px', background: `${getScoreColor(overallScore)}20`, border: `1px solid ${getScoreColor(overallScore)}40`, color: getScoreColor(overallScore), fontWeight: '700', fontSize: '18px' }}>
+            {overallScore}% Score
+          </div>
+          <div style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+            {hiringRecommendation}
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="space-y-4">
-            {loading ? (
-              <div className="rounded-3xl border border-dashed border-white/10 bg-[#0F0F13] px-5 py-10 text-sm text-[#8B8B9E]">
-                Loading history from Supabase...
-              </div>
-            ) : analyses.length ? (
-              analyses.map((analysis) => (
-                <AnalysisCard
-                  key={analysis.id}
-                  analysis={analysis}
-                  active={analysis.id === selectedAnalysisId}
-                  onClick={() => setSelectedAnalysisId(analysis.id)}
-                />
-              ))
-            ) : (
-              <div className="rounded-3xl border border-dashed border-white/10 bg-[#0F0F13] px-5 py-10 text-sm text-[#8B8B9E]">
-                No saved analyses found yet. Analyze a resume to populate this view.
-              </div>
-            )}
+        {profileSummary ? (
+          <div style={{ marginTop: '20px' }}>
+            <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Profile Summary</h3>
+            <p style={{ fontSize: '13px', lineHeight: '1.6', color: 'rgba(255,255,255,0.8)' }}>{profileSummary}</p>
           </div>
+        ) : null}
 
-          <div className="rounded-3xl border border-white/10 bg-[#0F0F13] p-5">
-            {selectedAnalysis ? (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B8B9E]">Selected analysis</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#F1F1F3]">
-                  {resumeData?.candidateName || resumeData?.name || 'Resume analysis'}
-                </h2>
-                <p className="mt-1 text-sm text-[#8B8B9E]">
-                  {resumeData?.email || '--'} · {formatDate(selectedAnalysis?.created_at)}
-                </p>
-
-                <div className="mt-5 grid grid-cols-2 gap-3 text-center">
-                  <div className="rounded-2xl border border-white/10 bg-[#15151C] p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-[#8B8B9E]">Overall Score</p>
-                    <p className="mt-1 text-xl font-semibold text-[#F1F1F3]">{overallScore}%</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-[#15151C] p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-[#8B8B9E]">Experience</p>
-                    <p className="mt-1 text-xl font-semibold text-[#F1F1F3]">{resumeData?.experienceLevel || '--'}</p>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4">
-                  <p className="text-sm font-semibold text-[#F1F1F3]">Profile summary</p>
-                  <p className="mt-2 text-sm leading-6 text-[#D8D8E0]">{profileSummary || 'No profile summary was saved in this analysis.'}</p>
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-[#15151C] p-4">
-                  <p className="text-sm font-semibold text-[#F1F1F3]">Hiring recommendation</p>
-                  <p className="mt-2 text-sm text-[#8B8B9E]">{hiringRecommendation}</p>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <SectionPills title="Technical skills" items={selectedTechnicalSkills} emptyMessage="No technical skills were saved in this analysis." />
-
-                  <SectionList
-                    title="Work experience"
-                    items={selectedExperience}
-                    emptyMessage="No work experience was saved in this analysis."
-                    renderItem={(item) => (
-                      <div className="space-y-2">
-                        <p className="font-semibold text-[#F1F1F3]">{item.title}</p>
-                        <p className="text-sm text-[#8B8B9E]">
-                          {item.company || '--'}{item.duration ? ` · ${item.duration}` : ''}
-                        </p>
-                        {item.highlights.length ? (
-                          <ul className="ml-5 list-disc space-y-1 text-sm text-[#D8D8E0]">
-                            {item.highlights.map((highlight, index) => (
-                              <li key={`${item.title}-${index}`}>{highlight}</li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    )}
-                  />
-
-                  <SectionList
-                    title="Education"
-                    items={selectedEducation}
-                    emptyMessage="No education details were saved in this analysis."
-                    renderItem={(item) => (
-                      <div className="space-y-1">
-                        <p className="font-semibold text-[#F1F1F3]">{item.degree}</p>
-                        <p className="text-sm text-[#8B8B9E]">
-                          {item.institution || '--'}{item.year ? ` · ${item.year}` : ''}{item.gpa ? ` · GPA ${item.gpa}` : ''}
-                        </p>
-                      </div>
-                    )}
-                  />
-
-                  <SectionList
-                    title="Projects"
-                    items={selectedProjects}
-                    emptyMessage="No projects were saved in this analysis."
-                    renderItem={(item) => (
-                      <div className="space-y-1">
-                        <p className="font-semibold text-[#F1F1F3]">{item.name}</p>
-                        <p className="text-sm text-[#8B8B9E]">{item.description || 'No description saved.'}</p>
-                        {item.technologies.length ? (
-                          <p className="text-xs uppercase tracking-[0.14em] text-[#8B8B9E]">{item.technologies.join(' · ')}</p>
-                        ) : null}
-                      </div>
-                    )}
-                  />
-
-                  <SectionPills title="Strengths" items={selectedStrengths} emptyMessage="No strengths were saved in this analysis." />
-                  <SectionPills title="Areas to improve" items={selectedAreasToImprove} emptyMessage="No improvement areas were saved in this analysis." />
-                </div>
-              </div>
-            ) : (
-              <div className="flex min-h-[300px] items-center justify-center rounded-3xl border border-dashed border-white/10 text-sm text-[#8B8B9E]">
-                Select an analysis to view details.
-              </div>
-            )}
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Technical Skills</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {selectedTechnicalSkills.length ? selectedTechnicalSkills.map((skill) => (
+              <span key={skill} style={{ padding: '4px 10px', background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.3)', borderRadius: '20px', fontSize: '12px', color: '#14b8a6' }}>{skill}</span>
+            )) : <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No technical skills were saved in this analysis.</span>}
           </div>
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Work Experience</h3>
+          {selectedExperience.length ? selectedExperience.map((job, index) => (
+            <div key={`${job.title}-${index}`} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>{job.title}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>{job.company} • {job.duration}</div>
+              {job.highlights?.slice(0, 2).map((highlight, highlightIndex) => (
+                <div key={`${job.title}-${highlightIndex}`} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '2px' }}>• {highlight}</div>
+              ))}
+            </div>
+          )) : <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No work experience was saved in this analysis.</p>}
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Education</h3>
+          {selectedEducation.length ? selectedEducation.map((edu, index) => (
+            <div key={`${edu.degree}-${index}`} style={{ marginBottom: '8px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>{edu.degree}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>{edu.institution} • {edu.year}{edu.gpa ? ` • GPA: ${edu.gpa}` : ''}</div>
+            </div>
+          )) : <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No education details were saved in this analysis.</p>}
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Projects</h3>
+          {selectedProjects.length ? selectedProjects.map((project, index) => (
+            <div key={`${project.name}-${index}`} style={{ marginBottom: '8px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>{project.name}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>{project.description || 'No description saved.'}</div>
+            </div>
+          )) : <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No projects were saved in this analysis.</p>}
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Strengths</h3>
+          {selectedStrengths.length ? selectedStrengths.map((strength, index) => (
+            <div key={`${strength}-${index}`} style={{ fontSize: '13px', color: '#22c55e', marginBottom: '4px' }}>✓ {strength}</div>
+          )) : <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No strengths were saved in this analysis.</p>}
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Areas to improve</h3>
+          {selectedAreasToImprove.length ? selectedAreasToImprove.map((area, index) => (
+            <div key={`${area}-${index}`} style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>→ {area}</div>
+          )) : <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>No improvement areas were saved in this analysis.</p>}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => import('@/lib/generateReport').then(({ generateAnalysisReport }) => generateAnalysisReport(resumeData))}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: 'white',
+            color: 'black',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+            marginTop: '20px',
+          }}
+        >
+          ⬇️ Download PDF Report
+        </button>
+      </div>
+    );
+  }
+
+  function renderBatchDetail(item) {
+    return (
+      <div>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Selected batch run</p>
+        <h2 style={{ fontSize: '22px', fontWeight: '700', margin: '0 0 4px' }}>{item?.jobTitle || 'Batch Review'}</h2>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0 0 12px' }}>
+          {item?.companyName || 'Recruiter Batch'} • {formatDate(item?.created_at)}
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 16px', borderRadius: '8px', background: `${getScoreColor(item?.averageScore || 0)}20`, border: `1px solid ${getScoreColor(item?.averageScore || 0)}40`, color: getScoreColor(item?.averageScore || 0), fontWeight: '700', fontSize: '18px' }}>
+            {Math.round(item?.averageScore || 0)}% Avg
+          </div>
+          <div style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+            {item?.totalResumes || 0} candidates
+          </div>
+          <div style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+            {item?.recommendation || 'Review manually'}
+          </div>
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Top candidate</h3>
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)' }}>{item?.topCandidate || '--'}</p>
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>Candidate matches</h3>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {(item?.results || []).map((candidate, index) => (
+              <div key={`${candidate.candidateName}-${index}`} style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: '600' }}>{candidate.candidateName}</div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>{candidate.recommendation}</div>
+                  </div>
+                  <div style={{ color: getScoreColor(candidate.matchScore), fontWeight: '700' }}>{Math.round(candidate.matchScore)}%</div>
+                </div>
+                {candidate.summary ? <p style={{ marginTop: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>{candidate.summary}</p> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => import('@/lib/generateReport').then(({ generateAnalysisReport }) => generateAnalysisReport({
+            candidateName: item?.jobTitle || 'Batch Review',
+            overallScore: item?.averageScore || 0,
+            hiringRecommendation: item?.recommendation || 'Review manually',
+            profileSummary: `${item?.companyName || 'Recruiter Batch'} • ${item?.totalResumes || 0} candidates`,
+            technicalSkills: [],
+            strengths: [],
+            areasToImprove: [],
+          }, {
+            matchScore: item?.averageScore || 0,
+            recommendation: item?.recommendation || 'Review manually',
+            matchedSkills: [],
+            missingSkills: [],
+            summary: `${item?.totalResumes || 0} candidate batch loaded from Supabase job_matches.`,
+          }))}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: 'white',
+            color: 'black',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+            marginTop: '20px',
+          }}
+        >
+          ⬇️ Download PDF Report
+        </button>
+      </div>
+    );
+  }
+
+  const listEmptyMessage = activeTab === 'analyses'
+    ? 'No candidate analyses have been saved in Supabase yet.'
+    : 'No batch runs were found in Supabase yet.';
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0a0a1a', color: 'white', padding: '24px' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>SESSION HISTORY</p>
+        <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px' }}>Your analyses and batch runs</h1>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>
+          Loaded directly from Supabase — {analyses.length} analyses and {batches.length} batch runs found
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('analyses')}
+          style={{
+            padding: '10px 20px',
+            background: activeTab === 'analyses' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '8px',
+            color: 'white',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '600',
+          }}
+        >
+          My Analyses
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('batches')}
+          style={{
+            padding: '10px 20px',
+            background: activeTab === 'batches' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '8px',
+            color: 'white',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '600',
+          }}
+        >
+          Batch Runs
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder={activeTab === 'analyses' ? 'Search by candidate name...' : 'Search by job title or company...'}
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          style={{
+            flex: 1,
+            minWidth: '200px',
+            padding: '10px 16px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '8px',
+            color: 'white',
+            fontSize: '14px',
+            outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={loadHistory}
+          style={{
+            padding: '10px 20px',
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '8px',
+            color: 'white',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >
+          🔄 Refresh
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '20px', alignItems: 'start' }}>
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', overflow: 'hidden' }}>
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>Loading history from Supabase...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>{searchQuery ? 'No results found.' : listEmptyMessage}</div>
+          ) : (
+            filtered.map((item) => {
+              const isSelected = selectedItem?.id === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setSelected(item)}
+                  style={{
+                    padding: '16px 20px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    cursor: 'pointer',
+                    background: isSelected ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '12px' }}>
+                    <span style={{ fontWeight: '600', fontSize: '15px' }}>{item.title || item.jobTitle || 'Unknown'}</span>
+                    <span style={{ fontSize: '16px', fontWeight: '700', color: getScoreColor(item.score || item.averageScore || 0) }}>
+                      {Math.round(item.score || item.averageScore || 0)}%
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>{item.subtitle || item.companyName || 'No email'}</div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '20px',
+                        background: `${getRecommendationBadge(item.recommendation)}20`,
+                        color: getRecommendationBadge(item.recommendation),
+                        border: `1px solid ${getRecommendationBadge(item.recommendation)}40`,
+                      }}
+                    >
+                      {item.recommendation || 'Review manually'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{formatDate(item.created_at || item.raw?.created_at)}</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', minHeight: '400px' }}>
+          {!selectedItem ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: 'rgba(255,255,255,0.3)', fontSize: '14px' }}>
+              Select an analysis to view details
+            </div>
+          ) : activeTab === 'analyses' ? (
+            renderAnalysisDetail(selectedItem)
+          ) : (
+            renderBatchDetail(selectedItem)
+          )}
         </div>
       </div>
     </div>
