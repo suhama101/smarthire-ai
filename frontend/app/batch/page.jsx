@@ -259,6 +259,7 @@ function ResultRow({ row, expanded, onToggle }) {
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Missing Skills</p>
                     <p className="mt-2 text-sm text-[#F1F1F3]">{(row.missingSkills || []).length ? row.missingSkills.join(', ') : 'None'}</p>
+                  </div>
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3 sm:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Experience</p>
                     <p className="mt-2 text-sm text-[#F1F1F3]">
