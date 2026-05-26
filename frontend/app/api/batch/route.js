@@ -138,7 +138,8 @@ export async function POST(req) {
   try {
     console.log('=== BATCH ROUTE REACHED ===');
     console.log('GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY);
-    console.log('GROQ_MODEL:', process.env.GROQ_MODEL);
+    const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    console.log('GROQ_MODEL:', groqModel);
 
     let formData;
     try {
