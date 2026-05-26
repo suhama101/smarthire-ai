@@ -206,7 +206,7 @@ export default function CandidateWorkbench() {
         },
       });
     } catch (error) {
-      setMatchError(getFriendlyApiError(error, 'Job matching failed.'));
+      setMatchError(error.response?.data?.error || error.response?.data?.message || error.message || 'Job matching failed. Please try again.');
     } finally {
       setIsMatching(false);
     }
