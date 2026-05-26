@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import axios from 'axios';
 import { BarChart3, CheckCircle2, Download, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { addAnalysisEntry } from '../../../lib/history-store';
+import { getFrontendOrigin } from '../../../lib/api';
 import { generateAnalysisReport } from '../../../lib/generateReport';
 import { getSupabaseClient } from '../../../services/supabaseClient.js';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../../lib/input-utils';
@@ -105,6 +106,7 @@ function recommendationTone(value) {
 
 export default function CandidateWorkbench() {
   const fileInputRef = useRef(null);
+  const jobMatchApiUrl = `${getFrontendOrigin()}/api/analyze/match`;
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeData, setResumeData] = useState(null);
   const [resumeText, setResumeText] = useState('');
@@ -179,7 +181,7 @@ export default function CandidateWorkbench() {
     setLearningPlan(null);
 
     try {
-      const response = await axios.post('/api/analyze/match', {
+      const response = await axios.post(jobMatchApiUrl, {
         analysisId,
         jobTitle: nextJobTitle,
         jobDescription: nextJobDescription,
