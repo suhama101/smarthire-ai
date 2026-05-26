@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react';
 import axios from 'axios';
-import { BarChart3, CheckCircle2, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, Download, FileText, GraduationCap, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { addAnalysisEntry } from '../../../lib/history-store';
+import { generateAnalysisReport } from '../../../lib/generateReport';
 import { getSupabaseClient } from '../../../services/supabaseClient.js';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../../lib/input-utils';
 import ResumeAnalysisSections from '../../../components/analysis/ResumeAnalysisSections';
@@ -230,6 +231,14 @@ export default function CandidateWorkbench() {
     }
   }
 
+  function handleDownloadReport() {
+    if (!resumeData) {
+      return;
+    }
+
+    generateAnalysisReport(resumeData, matchResult);
+  }
+
   function handleDownloadPlan() {
     if (!learningPlan) {
       return;
@@ -274,6 +283,16 @@ export default function CandidateWorkbench() {
             {isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}
           </button>
           {resumeData ? <ResumeAnalysisSections analysis={resumeData} /> : null}
+          {resumeData ? (
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90"
+            >
+              <Download className="h-4 w-4" />
+              Download PDF Report
+            </button>
+          ) : null}
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-[#0F0F13] p-5">

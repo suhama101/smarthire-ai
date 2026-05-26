@@ -20,7 +20,7 @@
     "formidable": "^3.0.0",
     "groq-sdk": "^0.3.0",
     "jsonwebtoken": "^9.0.3",
-    "jspdf": "^2.5.2",
+    "jspdf": "^2.5.1",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^1.8.0",
     "mammoth": "^1.12.0",

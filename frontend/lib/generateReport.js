@@ -1,0 +1,1 @@
+export { generateAnalysisReport } from '../src/lib/generateReport.js';

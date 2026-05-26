@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, BriefcaseBusiness, ChevronDown, FileText, Home, History, LogOut, Menu, Shield, Sparkles, X } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, ChevronDown, Home, History, LogOut, Menu, Shield, Sparkles, X } from 'lucide-react';
 import { clearAuthSession, readStoredAuth } from '../../src/lib/auth-session';
 
 function getInitials(name) {
@@ -49,7 +49,6 @@ function getNavItems(role) {
     return [
       ...baseItems,
       { label: 'My Analysis', href: '/dashboard', icon: Sparkles },
-      { label: 'History', href: '/history', icon: FileText },
     ];
   }
 

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { readStoredAuth } from '../../src/lib/auth-session';
 import { addBatchRun, buildBatchName, buildBatchResultsCsv, buildReportFilename } from '../../src/lib/batch-history';
+import { generateAnalysisReport } from '../../src/lib/generateReport';
 import { getFriendlyApiError, sanitizeText, validateResumeFile } from '../../src/lib/input-utils';
 
 const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt,.md';
@@ -177,6 +178,31 @@ function isValidExtension(fileName) {
 }
 
 function ResultRow({ row, expanded, onToggle }) {
+  function handleDownloadReport(event) {
+    event?.stopPropagation?.();
+    generateAnalysisReport(
+      {
+        candidateName: row.candidateName,
+        email: row.profile?.email,
+        phone: row.profile?.phone,
+        profileSummary: row.profile?.summary,
+        technicalSkills: row.profile?.skills,
+        workExperience: row.profile?.experience,
+        education: row.profile?.education,
+        yearsExperience: row.profile?.yearsExperience,
+        overallScore: row.matchScore,
+        hiringRecommendation: row.recommendation,
+      },
+      {
+        matchScore: row.matchScore,
+        recommendation: row.recommendation,
+        matchedSkills: row.matchedSkills,
+        missingSkills: row.missingSkills,
+        summary: row.profile?.summary,
+      }
+    );
+  }
+
   return (
     <>
       <tr className="transition hover:bg-white/5">
@@ -204,10 +230,20 @@ function ResultRow({ row, expanded, onToggle }) {
             {normalizeRecommendationGroup(row.recommendation, Number(row.matchScore))}
           </span>
         </td>
+        <td className="px-4 py-4">
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0F0F13] px-3 py-2 text-xs font-semibold text-[#F1F1F3] transition hover:bg-white/5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            PDF
+          </button>
+        </td>
       </tr>
       {expanded ? (
         <tr className="bg-[#111827]">
-          <td colSpan={6} className="px-4 py-5">
+          <td colSpan={7} className="px-4 py-5">
             <div className="rounded-2xl border border-white/10 bg-[#0F0F13] p-4">
               <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div>
@@ -221,12 +257,17 @@ function ResultRow({ row, expanded, onToggle }) {
                     <p className="mt-2 text-sm text-[#F1F1F3]">{(row.matchedSkills || []).length ? row.matchedSkills.join(', ') : 'None'}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3">
+                            ['PDF', 'pdf'],
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Missing Skills</p>
                     <p className="mt-2 text-sm text-[#F1F1F3]">{(row.missingSkills || []).length ? row.missingSkills.join(', ') : 'None'}</p>
-                  </div>
+                              {key === 'pdf' ? (
+                                <span className="inline-flex items-center gap-2 font-semibold">{label}</span>
+                              ) : (
+                                <button type="button" onClick={() => setSortConfig((current) => current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: key === 'matchScore' ? 'desc' : 'asc' })} className="inline-flex items-center gap-2 font-semibold">
                   <div className="rounded-2xl border border-white/10 bg-[#1A1A24] p-3 sm:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8B9E]">Experience</p>
-                    <p className="mt-2 text-sm text-[#F1F1F3]">
+                                </button>
+                              )}
                       {(row.profile?.experience || []).length
                         ? row.profile.experience.map((item) => [item.title, item.company, item.duration].filter(Boolean).join(' • ')).join(' | ')
                         : 'No experience details extracted.'}
@@ -923,7 +964,7 @@ export default function BatchResumeUploadPage() {
                           ))
                         ) : (
                           <tr>
-                            <td className="px-4 py-6 text-sm text-[#8B8B9E]" colSpan={6}>
+                            <td className="px-4 py-6 text-sm text-[#8B8B9E]" colSpan={7}>
                               No matching candidates found. Adjust the filters or search by name.
                             </td>
                           </tr>
