@@ -20,7 +20,15 @@ function getInitials(name) {
 }
 
 function resolveRole(session) {
-  const role = String(session?.user?.role || session?.user?.user_role || session?.user?.account_type || session?.role || '').toLowerCase();
+  const role = String(
+    session?.user?.user_metadata?.role ||
+    session?.profile?.role ||
+    session?.user?.role ||
+    session?.user?.user_role ||
+    session?.user?.account_type ||
+    session?.role ||
+    'candidate'
+  ).toLowerCase();
 
   if (role === 'recruiter') {
     return 'recruiter';
@@ -30,7 +38,7 @@ function resolveRole(session) {
     return 'candidate';
   }
 
-  return 'guest';
+  return 'candidate';
 }
 
 function getNavItems(role) {
@@ -92,8 +100,8 @@ export default function AuthenticatedShell({ children }) {
     setMobileMenuOpen(false);
   }, [currentPathname]);
 
-  const role = useMemo(() => resolveRole(authSession), [authSession]);
-  const navItems = useMemo(() => getNavItems(role), [role]);
+  const userRole = useMemo(() => resolveRole(authSession), [authSession]);
+  const navItems = useMemo(() => getNavItems(userRole), [userRole]);
 
   const displayName = authSession?.user?.full_name || authSession?.user?.email || 'Guest';
   const initials = getInitials(displayName);
