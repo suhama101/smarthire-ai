@@ -177,24 +177,29 @@ function createMemoryClient() {
   };
 }
 
-export function getSupabaseClient() {
+export function getSupabaseClient(options = {}) {
   if (cachedClient) {
     return cachedClient;
   }
 
+  const allowMissing = Boolean(options?.allowMissing);
   const url = String(process.env.SUPABASE_URL || '').trim();
   const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const anonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
   const key = serviceRoleKey || anonKey;
 
-  if (process.env.NODE_ENV === 'production' && (!url || !key)) {
-    throw new Error('Supabase credentials are not configured.');
-  }
-
   if (url && key) {
     cachedClient = createClient(url, key);
     cachedClient.__isMemory = false;
     return cachedClient;
+  }
+
+  if (allowMissing) {
+    return null;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Supabase credentials are not configured.');
   }
 
   if (!warnedAboutFallback) {
