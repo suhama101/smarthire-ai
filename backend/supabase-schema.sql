@@ -31,6 +31,16 @@ create table if not exists public.job_matches (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.batch_runs (
+  id text primary key,
+  user_id text not null,
+  job_description text not null,
+  candidates jsonb not null default '[]'::jsonb,
+  total_candidates integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists analyses_user_id_idx on public.analyses(user_id);
 create index if not exists job_matches_user_id_idx on public.job_matches(user_id);
 create index if not exists job_matches_analysis_id_idx on public.job_matches(analysis_id);
+create index if not exists batch_runs_user_id_idx on public.batch_runs(user_id);

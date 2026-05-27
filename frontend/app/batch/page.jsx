@@ -567,6 +567,35 @@ export default function BatchResumeUploadPage() {
         results: rankedByScore,
       };
 
+      if (rankedByScore.length) {
+        const stored = readStoredAuth();
+        const userId = stored?.user?.id || stored?.user?.user_id || stored?.user?.email || '';
+        const saveApiBase = String(process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+        const saveEndpoint = saveApiBase ? `${saveApiBase}/api/batch/save` : '/api/batch/save';
+
+        try {
+          const saveResponse = await fetch(saveEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId,
+              jobDescription: savedJob.jobDescription,
+              candidates: rankedByScore,
+              totalCandidates: files.length,
+            }),
+          });
+
+          if (!saveResponse.ok) {
+            const saveResponseText = await saveResponse.text();
+            console.error('Failed to save batch run:', saveResponse.status, saveResponseText);
+          }
+        } catch (saveError) {
+          console.error('Failed to save batch run:', saveError);
+        }
+      }
+
       addBatchRun(completedBatch);
       setBatchRun(completedBatch);
       setProgress({ current: workingFiles.length, total: workingFiles.length, label: 'Batch analysis complete.' });

@@ -5,6 +5,7 @@ const path = require('path');
 const { uploadBatch } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
 const { extractResumeData, matchJobDescription, isAnthropicConfigured } = require('../services/claudeService');
+const { saveBatchRun } = require('../services/db');
 
 const router = express.Router();
 const DEFAULT_USER_ID = 'public-user';
@@ -189,6 +190,42 @@ router.post('/analyze', async (req, res, next) => {
       return res.status(err.status).json({ error: err.message });
     }
 
+    next(err);
+  }
+});
+
+router.post('/save', async (req, res, next) => {
+  try {
+    const userId = String(req.user?.id || req.body?.userId || DEFAULT_USER_ID).trim() || DEFAULT_USER_ID;
+    const jobDescription = String(req.body?.jobDescription || req.body?.job_description || '').trim();
+    const incomingCandidates = Array.isArray(req.body?.candidates) ? req.body.candidates : [];
+    const totalCandidates = Number(req.body?.totalCandidates ?? req.body?.total_candidates ?? incomingCandidates.length) || 0;
+
+    if (!jobDescription) {
+      return res.status(400).json({ error: 'jobDescription is required.' });
+    }
+
+    if (!incomingCandidates.length) {
+      return res.status(400).json({ error: 'candidates must be a non-empty array.' });
+    }
+
+    const candidates = incomingCandidates.map((candidate) => ({
+      candidateName: String(candidate?.candidateName || candidate?.name || 'Candidate').trim(),
+      matchScore: Number(candidate?.matchScore ?? candidate?.score) || 0,
+      matchedSkills: Array.isArray(candidate?.matchedSkills) ? candidate.matchedSkills : [],
+      missingSkills: Array.isArray(candidate?.missingSkills) ? candidate.missingSkills : [],
+      recommendation: String(candidate?.recommendation || 'Review manually').trim(),
+      summary: String(candidate?.summary || '').trim(),
+      profile: candidate?.profile && typeof candidate.profile === 'object' ? candidate.profile : null,
+    }));
+
+    const batchRun = await saveBatchRun(userId, jobDescription, candidates, totalCandidates || candidates.length);
+
+    return res.status(201).json({
+      message: 'Batch run saved successfully.',
+      batchRun,
+    });
+  } catch (err) {
     next(err);
   }
 });

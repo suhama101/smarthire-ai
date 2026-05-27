@@ -124,6 +124,31 @@ async function deleteJobMatchById(id, userId) {
   return Boolean(data);
 }
 
+async function saveBatchRun(userId, jobDescription, candidates, totalCandidates) {
+  const supabase = getSupabaseClient();
+  const batchRun = {
+    id: createId('batchrun'),
+    user_id: userId,
+    job_description: jobDescription,
+    candidates: Array.isArray(candidates) ? candidates : [],
+    total_candidates: Number(totalCandidates) || 0,
+    created_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('batch_runs')
+    .insert(batchRun)
+    .select('*')
+    .single();
+
+  const mappedError = mapSupabaseError(error, 'Failed to save batch run.');
+  if (mappedError) {
+    throw mappedError;
+  }
+
+  return data;
+}
+
 async function seedDemoDataIfEmpty(userId = 'demo-user') {
   const supabase = getSupabaseClient();
 
@@ -169,5 +194,6 @@ module.exports = {
   deleteAnalysisById,
   saveJobMatch,
   deleteJobMatchById,
+  saveBatchRun,
   seedDemoDataIfEmpty,
 };

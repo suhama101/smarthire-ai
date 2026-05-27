@@ -109,53 +109,36 @@ function analysisToCard(analysis) {
 }
 
 function buildBatchSummary(rows) {
-  const grouped = new Map();
+  return (rows || [])
+    .map((row, index) => {
+      const rawCandidates = Array.isArray(row?.candidates) ? row.candidates : [];
+      const results = rawCandidates.map((candidate) => ({
+        candidateName: normalizeText(candidate?.candidateName || candidate?.name || 'Candidate'),
+        matchScore: Number(candidate?.matchScore ?? candidate?.score) || 0,
+        recommendation: normalizeText(candidate?.recommendation || 'Review manually'),
+        matchedSkills: Array.isArray(candidate?.matchedSkills) ? candidate.matchedSkills : [],
+        missingSkills: Array.isArray(candidate?.missingSkills) ? candidate.missingSkills : [],
+        summary: normalizeText(candidate?.summary),
+        email: normalizeText(candidate?.email || candidate?.profile?.email),
+        phone: normalizeText(candidate?.phone || candidate?.profile?.phone),
+        profile: candidate?.profile && typeof candidate.profile === 'object' ? candidate.profile : null,
+      }));
 
-  (rows || []).forEach((row) => {
-    const createdAt = row.created_at || row.createdAt || new Date().toISOString();
-    const bucketKey = [normalizeText(row.job_title), normalizeText(row.company_name), new Date(createdAt).toDateString()].join('::');
-
-    if (!grouped.has(bucketKey)) {
-      grouped.set(bucketKey, {
-        id: bucketKey,
-        type: 'batches',
-        jobTitle: normalizeText(row.job_title) || 'Batch Review',
-        companyName: normalizeText(row.company_name) || 'Recruiter Batch',
-        created_at: createdAt,
-        results: [],
-      });
-    }
-
-    const entry = grouped.get(bucketKey);
-    const matchResult = row.match_result && typeof row.match_result === 'object' ? row.match_result : {};
-    const candidateName = normalizeText(
-      matchResult?.candidateName || matchResult?.name || row.candidate_name || row.candidateName || row.file_name || 'Candidate'
-    );
-    const score = Number(matchResult?.matchScore ?? matchResult?.overallScore ?? row.match_score ?? row.matchScore) || 0;
-
-    entry.results.push({
-      candidateName,
-      matchScore: score,
-      recommendation: normalizeText(matchResult?.recommendation || row.recommendation || 'Review manually'),
-      matchedSkills: Array.isArray(matchResult?.matchedSkills) ? matchResult.matchedSkills : [],
-      missingSkills: Array.isArray(matchResult?.missingSkills) ? matchResult.missingSkills : [],
-      summary: normalizeText(matchResult?.summary),
-      email: normalizeText(matchResult?.email),
-      phone: normalizeText(matchResult?.phone),
-      profile: matchResult?.profile && typeof matchResult.profile === 'object' ? matchResult.profile : null,
-    });
-  });
-
-  return Array.from(grouped.values())
-    .map((batch) => {
-      const scores = batch.results.map((item) => Number(item.matchScore) || 0);
+      const scores = results.map((item) => Number(item.matchScore) || 0);
       const averageScore = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : 0;
-      const topCandidate = [...batch.results].sort((left, right) => Number(right.matchScore) - Number(left.matchScore))[0]?.candidateName || '--';
+      const topCandidate = [...results].sort((left, right) => Number(right.matchScore) - Number(left.matchScore))[0]?.candidateName || '--';
+      const jobDescription = normalizeText(row?.job_description || row?.jobDescription);
+      const firstLine = jobDescription.split('\n').map((line) => line.trim()).find(Boolean) || '';
 
       return {
-        ...batch,
+        id: normalizeText(row?.id) || `batch-${index}-${normalizeText(row?.created_at || row?.createdAt)}`,
+        type: 'batches',
+        jobTitle: firstLine.slice(0, 80) || 'Batch Review',
+        companyName: 'Recruiter Batch',
+        created_at: row?.created_at || row?.createdAt || new Date().toISOString(),
+        results,
         averageScore,
-        totalResumes: batch.results.length,
+        totalResumes: Number(row?.total_candidates ?? row?.totalCandidates) || results.length,
         topCandidate,
         recommendation: averageScore >= 80 ? 'Strong Hire' : averageScore >= 60 ? 'Hire' : averageScore >= 40 ? 'Maybe' : 'Pass',
       };
@@ -199,7 +182,7 @@ export default function HistoryPage() {
           .order('created_at', { ascending: false })
           .limit(100),
         supabase
-          .from('job_matches')
+          .from('batch_runs')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
