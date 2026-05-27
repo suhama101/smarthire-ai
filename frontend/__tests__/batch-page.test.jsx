@@ -11,11 +11,13 @@ jest.setTimeout(15000);
 
 describe('BatchResumeUploadPage', () => {
   const replaceMock = jest.fn();
+  const tokenPayload = Buffer.from(JSON.stringify({ id: 'user-123', email: 'adminhr@example.com', role: 'recruiter' })).toString('base64url');
+  const fakeJwt = `header.${tokenPayload}.signature`;
 
   beforeEach(() => {
     jest.clearAllMocks();
     window.localStorage.clear();
-    window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123', user: { id: 'user-123', role: 'recruiter' } }));
+    window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: fakeJwt, user: { role: 'recruiter' } }));
     useRouter.mockReturnValue({ replace: replaceMock });
 
     global.FileReader = class MockFileReader {
@@ -122,7 +124,7 @@ describe('BatchResumeUploadPage', () => {
       expect(fetch.mock.calls[0][1].body.getAll('files').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
       expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
       expect(fetch.mock.calls[1][0]).toBe('/api/batch/save');
-      expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer token-123');
+      expect(fetch.mock.calls[1][1].headers.Authorization).toBe(`Bearer ${fakeJwt}`);
       expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
         userId: 'user-123',
         user_id: 'user-123',
