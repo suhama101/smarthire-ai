@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, BarChart3, Brain, CheckCircle2, Compass, ShieldCheck, Sparkles } from 'lucide-react';
 import AuthenticatedShell from './components/authenticated-shell';
 import { readStoredAuth } from '../src/lib/auth-session';
 
@@ -103,9 +103,6 @@ export default function LandingPage() {
                   <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#0B0B10] transition hover:bg-white/90">
                     Open dashboard <ArrowRight className="h-4 w-4" />
                   </Link>
-                  <Link href="/history" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
-                    Review history <Users className="h-4 w-4" />
-                  </Link>
                 </div>
                 <div className="mt-10 flex flex-wrap gap-3 text-sm text-[#B7B7C6]">
                   {TRUST_POINTS.map((point) => (
@@ -175,14 +172,13 @@ export default function LandingPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Enterprise</p>
               <h2 className="mt-3 text-3xl font-semibold text-white">A cleaner front door for enterprise stakeholders.</h2>
               <p className="mt-4 text-sm leading-7 text-[#B7B7C6]">
-                The homepage is now marketing-first, while the dashboard, batch upload, and history views stay available for active users. That keeps the product presentation sharp without hiding the actual workbench.
+                The homepage is now marketing-first, while the dashboard and batch upload views stay available for active users. That keeps the product presentation sharp without hiding the actual workbench.
               </p>
             </div>
             <div className="rounded-[2rem] border border-white/10 bg-[#111118] p-8">
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8B8B9E]">Navigation</p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {[
-                  { label: 'History', href: '/history', text: 'Review analyses and batch runs stored for this session.' },
                   { label: 'Login', href: '/login', text: 'Sign in to access protected routes.' },
                 ].map((link) => (
                   <Link key={link.label} href={link.href} className="rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10">
