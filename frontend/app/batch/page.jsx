@@ -570,8 +570,7 @@ export default function BatchResumeUploadPage() {
       if (rankedByScore.length) {
         const stored = readStoredAuth();
         const userId = stored?.user?.id || stored?.user?.user_id || stored?.user?.email || '';
-        const saveApiBase = String(process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
-        const saveEndpoint = saveApiBase ? `${saveApiBase}/api/batch/save` : '/api/batch/save';
+        const saveEndpoint = '/api/batch/save';
 
         try {
           const saveResponse = await fetch(saveEndpoint, {
