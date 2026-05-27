@@ -38,9 +38,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         {role === 'recruiter' ? (
           <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B8B9E]">Recruiter Dashboard</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#F1F1F3]">Batch analysis only</h2>
-            <p className="mt-3 text-sm text-[#8B8B9E]">Use Batch Upload to analyze multiple candidates at once.</p>
+            <p className="text-sm text-[#8B8B9E]">Use Batch Upload to analyze multiple candidates at once.</p>
             <Link
               href="/batch"
               className="mt-5 inline-flex items-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90"

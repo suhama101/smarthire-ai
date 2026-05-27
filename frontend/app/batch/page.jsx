@@ -25,6 +25,16 @@ const ACCEPTED_EXTENSIONS = '.pdf,.docx,.txt,.md';
 const MAX_FILES = 20;
 const PROCESS_DELAY_MS = 250;
 
+function getBatchSaveUrl() {
+  const backendBaseUrl = String(process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+
+  if (backendBaseUrl) {
+    return `${backendBaseUrl}/api/batch/save`;
+  }
+
+  return '/api/batch/save';
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -570,19 +580,24 @@ export default function BatchResumeUploadPage() {
       if (rankedByScore.length) {
         const stored = readStoredAuth();
         const userId = stored?.user?.id || stored?.user?.user_id || stored?.user?.email || '';
-        const saveEndpoint = '/api/batch/save';
+        const saveEndpoint = getBatchSaveUrl();
+        const authToken = stored?.token || '';
 
         try {
           const saveResponse = await fetch(saveEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
             },
             body: JSON.stringify({
               userId,
+              user_id: userId,
               jobDescription: savedJob.jobDescription,
+              job_description: savedJob.jobDescription,
               candidates: rankedByScore,
               totalCandidates: files.length,
+              total_candidates: files.length,
             }),
           });
 

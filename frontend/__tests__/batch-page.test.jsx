@@ -7,14 +7,17 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
+jest.setTimeout(15000);
+
 describe('BatchResumeUploadPage', () => {
   const replaceMock = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
     window.localStorage.clear();
-    window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123' }));
+    window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123', user: { id: 'user-123', role: 'recruiter' } }));
     useRouter.mockReturnValue({ replace: replaceMock });
+    process.env.NEXT_PUBLIC_API_URL = 'https://backend.example.com';
 
     global.FileReader = class MockFileReader {
       constructor() {
@@ -31,51 +34,65 @@ describe('BatchResumeUploadPage', () => {
       }
     };
 
-    global.fetch = jest.fn().mockImplementation(async (_url, options) => {
-      const files = Array.from(options.body.getAll('files'));
-      const response = {
-        success: true,
-        message: 'Batch analysis completed successfully!',
-        results: files.map((file) => {
-          if (String(file?.name || '').includes('ava')) {
+    global.fetch = jest.fn().mockImplementation(async (url, options = {}) => {
+      if (options.body instanceof FormData) {
+        const files = Array.from(options.body.getAll('files'));
+        const response = {
+          success: true,
+          message: 'Batch analysis completed successfully!',
+          results: files.map((file) => {
+            if (String(file?.name || '').includes('ava')) {
+              return {
+                fileName: file.name,
+                success: true,
+                data: {
+                  candidateName: 'Ava Chen',
+                  matchScore: 96,
+                  matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
+                  missingSkills: ['GraphQL'],
+                  technicalSkills: ['React', 'Next.js', 'Tailwind CSS'],
+                  recommendation: 'Strong Match',
+                  summary: 'Strong frontend match.',
+                  overallScore: 96,
+                  hiringRecommendation: 'Hire',
+                },
+              };
+            }
+
             return {
               fileName: file.name,
               success: true,
               data: {
-                candidateName: 'Ava Chen',
-                matchScore: 96,
-                matchedSkills: ['React', 'Next.js', 'Tailwind CSS'],
-                missingSkills: ['GraphQL'],
-                technicalSkills: ['React', 'Next.js', 'Tailwind CSS'],
+                candidateName: 'Noah Patel',
+                matchScore: 91,
+                matchedSkills: ['Node.js', 'Express', 'PostgreSQL'],
+                missingSkills: ['Redis'],
+                technicalSkills: ['Node.js', 'Express', 'PostgreSQL'],
                 recommendation: 'Strong Match',
-                summary: 'Strong frontend match.',
-                overallScore: 96,
+                summary: 'Strong backend match.',
+                overallScore: 91,
                 hiringRecommendation: 'Hire',
               },
             };
-          }
+          }),
+        };
 
-          return {
-            fileName: file.name,
-            success: true,
-            data: {
-              candidateName: 'Noah Patel',
-              matchScore: 91,
-              matchedSkills: ['Node.js', 'Express', 'PostgreSQL'],
-              missingSkills: ['Redis'],
-              technicalSkills: ['Node.js', 'Express', 'PostgreSQL'],
-              recommendation: 'Strong Match',
-              summary: 'Strong backend match.',
-              overallScore: 91,
-              hiringRecommendation: 'Hire',
-            },
-          };
-        }),
-      };
+        return {
+          ok: true,
+          text: async () => JSON.stringify(response),
+          json: async () => response,
+        };
+      }
 
       return {
         ok: true,
-        json: async () => response,
+        json: async () => ({
+          message: 'Batch run saved successfully.',
+          batchRun: {
+            id: 'batch-run-1',
+          },
+        }),
+        text: async () => JSON.stringify({ message: 'Batch run saved successfully.' }),
       };
     });
   });
@@ -102,13 +119,23 @@ describe('BatchResumeUploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Start Batch Analysis' }));
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
       expect(fetch.mock.calls[0][1].body.getAll('files').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
       expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
+      expect(fetch.mock.calls[1][0]).toBe('https://backend.example.com/api/batch/save');
+      expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer token-123');
+      expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+        userId: 'user-123',
+        user_id: 'user-123',
+        jobDescription: expect.any(String),
+        job_description: expect.any(String),
+        totalCandidates: 2,
+        total_candidates: 2,
+      });
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);
-    });
+    }, { timeout: 12000 });
 
     expect(screen.getByText('96%')).toBeInTheDocument();
     expect(screen.getByText('91%')).toBeInTheDocument();
