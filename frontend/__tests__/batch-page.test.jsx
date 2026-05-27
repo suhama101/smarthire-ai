@@ -17,7 +17,6 @@ describe('BatchResumeUploadPage', () => {
     window.localStorage.clear();
     window.localStorage.setItem('smarthire.auth', JSON.stringify({ token: 'token-123', user: { id: 'user-123', role: 'recruiter' } }));
     useRouter.mockReturnValue({ replace: replaceMock });
-    process.env.NEXT_PUBLIC_API_URL = 'https://backend.example.com';
 
     global.FileReader = class MockFileReader {
       constructor() {
@@ -122,7 +121,7 @@ describe('BatchResumeUploadPage', () => {
       expect(fetch).toHaveBeenCalledTimes(2);
       expect(fetch.mock.calls[0][1].body.getAll('files').map((file) => file.name)).toEqual(['ava-chen.pdf', 'noah-patel.docx']);
       expect(fetch.mock.calls[0][1].body.get('jobTitle')).toBe('Senior Frontend Engineer');
-      expect(fetch.mock.calls[1][0]).toBe('https://backend.example.com/api/batch/save');
+      expect(fetch.mock.calls[1][0]).toBe('/api/batch/save');
       expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer token-123');
       expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
         userId: 'user-123',

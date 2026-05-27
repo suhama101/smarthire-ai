@@ -26,12 +26,6 @@ const MAX_FILES = 20;
 const PROCESS_DELAY_MS = 250;
 
 function getBatchSaveUrl() {
-  const backendBaseUrl = String(process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
-
-  if (backendBaseUrl) {
-    return `${backendBaseUrl}/api/batch/save`;
-  }
-
   return '/api/batch/save';
 }
 
