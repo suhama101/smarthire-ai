@@ -3,6 +3,27 @@
 import { useEffect, useState } from 'react';
 import { readStoredAuth } from '../../src/lib/auth-session';
 
+function escapeCsvValue(value) {
+  const stringValue = String(value ?? '');
+
+  if (/[",\n\r]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+
+  return stringValue;
+}
+
+function buildCsv(rows) {
+  const headers = ['Name', 'Email', 'Score', 'Recommendation', 'Experience Level', 'Date'];
+  const lines = [headers.join(',')];
+
+  rows.forEach((row) => {
+    lines.push(headers.map((header) => escapeCsvValue(row[header])).join(','));
+  });
+
+  return lines.join('\r\n');
+}
+
 export default function HistoryPage() {
   const [analyses, setAnalyses] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -48,6 +69,29 @@ export default function HistoryPage() {
   const scoreColor = s => 
     s >= 80 ? '#22c55e' : s >= 60 ? '#eab308' : '#ef4444';
 
+  function handleExportCsv() {
+    const rows = analyses.map((item) => ({
+      Name: item.resume_data?.candidateName || item.resume_data?.name || 'Unknown',
+      Email: item.resume_data?.email || '',
+      Score: item.resume_data?.overallScore || '',
+      Recommendation: item.resume_data?.hiringRecommendation || '',
+      'Experience Level': item.resume_data?.experienceLevel || '',
+      Date: new Date(item.created_at).toLocaleDateString(),
+    }));
+
+    const csvContent = buildCsv(rows);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = 'SmartHire_Candidates_Export.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div style={{
       minHeight:'100vh', background:'#0a0a1a',
@@ -71,7 +115,7 @@ export default function HistoryPage() {
       </p>
 
       <div style={{
-        display:'flex', gap:'12px', marginBottom:'24px'
+        display:'flex', gap:'12px', marginBottom:'24px', alignItems:'center'
       }}>
         <input
           placeholder="Search by candidate name..."
@@ -85,13 +129,22 @@ export default function HistoryPage() {
             fontSize:'14px', outline:'none'
           }}
         />
-        <button onClick={load} style={{
-          padding:'10px 20px',
-          background:'rgba(255,255,255,0.1)',
-          border:'1px solid rgba(255,255,255,0.2)',
-          borderRadius:'8px', color:'white',
-          cursor:'pointer'
-        }}>🔄 Refresh</button>
+        <div style={{display:'flex', gap:'12px', marginLeft:'auto'}}>
+          <button onClick={handleExportCsv} style={{
+            padding:'10px 20px',
+            background:'rgba(255,255,255,0.1)',
+            border:'1px solid rgba(255,255,255,0.2)',
+            borderRadius:'8px', color:'white',
+            cursor:'pointer'
+          }}>⬇️ Export CSV</button>
+          <button onClick={load} style={{
+            padding:'10px 20px',
+            background:'rgba(255,255,255,0.1)',
+            border:'1px solid rgba(255,255,255,0.2)',
+            borderRadius:'8px', color:'white',
+            cursor:'pointer'
+          }}>🔄 Refresh</button>
+        </div>
       </div>
 
       <div style={{
