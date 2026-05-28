@@ -7,6 +7,44 @@ import { readStoredAuth } from '../../lib/auth-session';
 import { getSupabaseClient } from '../../lib/supabaseClient';
 import CandidateWorkbench from './components/CandidateWorkbench';
 
+function decodeJwtPayload(token) {
+  const rawToken = String(token || '').trim();
+
+  if (!rawToken || !rawToken.includes('.')) {
+    return null;
+  }
+
+  try {
+    const payloadPart = rawToken.split('.')[1];
+    const base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const json = typeof window !== 'undefined' && typeof window.atob === 'function'
+      ? window.atob(padded)
+      : Buffer.from(padded, 'base64').toString('utf8');
+
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function resolveRole(source) {
+  const directRole = String(
+    source?.user?.role ||
+      source?.user?.user_metadata?.role ||
+      source?.user?.app_metadata?.role ||
+      source?.user?.raw_user_meta_data?.role ||
+      source?.role ||
+      ''
+  ).toLowerCase();
+
+  if (directRole) {
+    return directRole;
+  }
+
+  return String(decodeJwtPayload(source?.token)?.role || '').toLowerCase();
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -23,14 +61,20 @@ export default function DashboardPage() {
 
       setIsAuthenticated(true);
 
-      let nextRole = String(stored?.user?.role || stored?.user?.user_role || stored?.user?.account_type || stored?.role || '').toLowerCase();
+      let nextRole = resolveRole(stored);
 
       try {
         const supabase = getSupabaseClient({ allowMissing: true });
 
         if (supabase) {
           const { data: { user } } = await supabase.auth.getUser();
-          const supabaseRole = String(user?.user_metadata?.role || user?.role || '').toLowerCase();
+          const supabaseRole = String(
+            user?.role ||
+            user?.user_metadata?.role ||
+            user?.app_metadata?.role ||
+            user?.raw_user_meta_data?.role ||
+            ''
+          ).toLowerCase();
 
           if (supabaseRole) {
             nextRole = supabaseRole;
@@ -61,7 +105,8 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         {role === 'recruiter' ? (
           <section className="rounded-3xl border border-white/10 bg-[#1A1A24] p-6 shadow-sm">
-            <p className="text-sm text-[#8B8B9E]">Use Batch Upload to analyze multiple candidates at once.</p>
+            <h2 className="text-2xl font-semibold text-[#F1F1F3]">Recruiter Workspace</h2>
+            <p className="mt-2 text-sm text-[#8B8B9E]">Use Batch Upload to screen multiple candidates at once.</p>
             <Link
               href="/batch"
               className="mt-5 inline-flex items-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F0F13] transition hover:bg-white/90"

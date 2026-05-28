@@ -32,19 +32,15 @@ function clearAnalysisState(setAnalysisId, setResumeData, setResumeText, setAnal
   setLearningPlan(null);
 }
 
-function downloadPdf(filename, content) {
-  const blob = new Blob([content], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+function sanitizePdfFileName(value) {
+  return String(value || 'candidate')
+    .trim()
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase() || 'candidate';
 }
 
-function buildLearningPlanText(plan, candidateName, jobTitle) {
+function getLearningPlanLines(plan, candidateName, jobTitle) {
   const lines = [
     'SmartHire AI Learning Plan',
     `Candidate: ${candidateName || 'Candidate'}`,
@@ -64,7 +60,7 @@ function buildLearningPlanText(plan, candidateName, jobTitle) {
     lines.push(`  Project: ${module.miniProject || ''}`);
   });
 
-  return lines.join('\n');
+  return lines;
 }
 
 function buildResumeText(profile) {
@@ -245,14 +241,70 @@ export default function CandidateWorkbench() {
     generateAnalysisReport(resumeData, matchResult);
   }
 
-  function handleDownloadPlan() {
+  async function handleDownloadPlan() {
     if (!learningPlan) {
       return;
     }
 
     const candidateName = resumeData?.name || resumeData?.candidateName || 'Candidate';
-    const text = buildLearningPlanText(learningPlan, candidateName, jobTitle);
-    downloadPdf(`SmartHire_LearningPlan_${String(candidateName).replace(/[^a-z0-9]+/gi, '_')}.pdf`, text);
+
+    const jsPdfModule = await import('jspdf');
+    const jsPDF = jsPdfModule.default || jsPdfModule.jsPDF;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 40;
+    const contentWidth = pageWidth - (marginX * 2);
+    const lines = getLearningPlanLines(learningPlan, candidateName, jobTitle);
+
+    doc.setProperties({
+      title: 'SmartHire AI Learning Plan',
+      subject: 'Personalized learning plan',
+      author: 'SmartHire AI',
+    });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('SmartHire AI Learning Plan', marginX, 48);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+
+    let y = 72;
+    lines.forEach((line) => {
+      const wrappedLines = doc.splitTextToSize(String(line), contentWidth);
+
+      if (y + (wrappedLines.length * 14) > pageHeight - 40) {
+        doc.addPage();
+        y = 48;
+      }
+
+      if (!line) {
+        y += 8;
+        return;
+      }
+
+      const isSectionTitle = line === 'Quick Wins' || line === 'Skill Modules' || line.startsWith('SmartHire AI Learning Plan');
+      doc.setFont('helvetica', isSectionTitle ? 'bold' : 'normal');
+      doc.text(wrappedLines, marginX, y);
+      y += wrappedLines.length * 14;
+      doc.setFont('helvetica', 'normal');
+    });
+
+    const pdfBlob = doc.output('blob');
+
+    if (!pdfBlob || pdfBlob.size === 0) {
+      throw new Error('Learning plan PDF generation failed.');
+    }
+
+    const url = URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `SmartHire_LearningPlan_${sanitizePdfFileName(candidateName)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return (
