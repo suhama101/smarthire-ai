@@ -341,6 +341,14 @@ function normalizeNestedArray(values) {
   return values.filter((item) => item && typeof item === 'object');
 }
 
+function cleanName(name) {
+  return String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-zA-Z\s\-'.]/g, '')
+    .trim();
+}
+
 function normalizeAnalysisData(raw) {
   const data = raw && typeof raw === 'object' ? raw : {};
   const workExperienceSource = normalizeNestedArray(data.workExperience || data.experience).map((item) => ({
@@ -363,8 +371,8 @@ function normalizeAnalysisData(raw) {
   const safeYearsExperience = Number.isFinite(yearsExperience) ? yearsExperience : null;
 
   return {
-    candidateName: String(data.candidateName || data.name || '').trim() || 'Unknown',
-    name: String(data.name || data.candidateName || '').trim() || 'Unknown',
+    candidateName: cleanName(data.candidateName || data.name || '') || 'Unknown',
+    name: cleanName(data.name || data.candidateName || '') || 'Unknown',
     email: data.email ? String(data.email).trim() : null,
     phone: data.phone ? String(data.phone).trim() : null,
     experienceLevel: String(data.experienceLevel || '').trim(),
@@ -400,8 +408,8 @@ function mapAnalysisToResumeData(analysis) {
   const data = analysis && typeof analysis === 'object' ? analysis : {};
 
   return {
-    name: data.candidateName || data.name || 'Unknown',
-    candidateName: data.candidateName || data.name || 'Unknown',
+    name: cleanName(data.candidateName || data.name || '') || 'Unknown',
+    candidateName: cleanName(data.candidateName || data.name || '') || 'Unknown',
     email: data.email || null,
     phone: data.phone || null,
     title: data.experienceLevel || 'Unknown',
@@ -588,7 +596,7 @@ function extractFallbackProfile(resumeText) {
   const phones = text.match(PHONE_REGEX) || [];
 
   return normalizeAnalysisData({
-    candidateName: lines[0] || 'Candidate',
+    candidateName: cleanName(lines[0] || 'Candidate') || 'Candidate',
     email: emails[0] || null,
     phone: phones[0] || null,
     technicalSkills: extractFallbackSkills(text),

@@ -195,6 +195,14 @@ function buildFallbackResumeData(resumeText) {
   return normalized;
 }
 
+function cleanName(name) {
+  return String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-zA-Z\s\-'.]/g, '')
+    .trim();
+}
+
 function uniqueStrings(values) {
   return Array.from(
     new Set((values || []).map((item) => String(item).trim()).filter(Boolean))
@@ -515,8 +523,8 @@ function normalizeResumeData(raw) {
   );
 
   return {
-    candidateName: typeof data.candidateName === 'string' ? data.candidateName : typeof data.name === 'string' ? data.name : 'Unknown',
-    name: typeof data.name === 'string' ? data.name : typeof data.candidateName === 'string' ? data.candidateName : 'Unknown',
+    candidateName: cleanName(typeof data.candidateName === 'string' ? data.candidateName : typeof data.name === 'string' ? data.name : 'Unknown') || 'Unknown',
+    name: cleanName(typeof data.name === 'string' ? data.name : typeof data.candidateName === 'string' ? data.candidateName : 'Unknown') || 'Unknown',
     email: typeof data.email === 'string' ? data.email : null,
     phone: typeof data.phone === 'string' ? data.phone : null,
     title: typeof data.title === 'string' ? data.title : 'Unknown',
