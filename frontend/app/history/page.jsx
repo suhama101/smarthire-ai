@@ -7,27 +7,24 @@ export default function HistoryPage() {
   const [analyses, setAnalyses] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
 
-  useEffect(() => { loadHistory(); }, []);
+  useEffect(() => { load(); }, []);
 
-  async function loadHistory() {
+  async function load() {
     try {
-      setLoading(true);
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
-
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('analyses')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(100);
-
-      if (!error && data) setAnalyses(data);
-    } catch(err) {
-      console.error('History error:', err);
+      setAnalyses(data || []);
+    } catch(e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -35,88 +32,62 @@ export default function HistoryPage() {
 
   const filtered = analyses.filter(a =>
     (a.resume_data?.candidateName || '')
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
+      .toLowerCase().includes(search.toLowerCase())
   );
 
-  function formatDate(d) {
-    return new Date(d).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric'
-    });
-  }
-
-  function scoreColor(s) {
-    return s >= 80 ? '#22c55e' : s >= 60 ? '#eab308' : '#ef4444';
-  }
-
-  function recColor(r) {
-    const map = {
-      'Strong Hire': '#22c55e',
-      'Hire': '#3b82f6',
-      'Maybe': '#eab308',
-      'Pass': '#ef4444'
-    };
-    return map[r] || '#6b7280';
-  }
+  const scoreColor = s => 
+    s >= 80 ? '#22c55e' : s >= 60 ? '#eab308' : '#ef4444';
 
   return (
     <div style={{
       minHeight:'100vh', background:'#0a0a1a',
       color:'white', padding:'24px'
     }}>
-      <div style={{marginBottom:'24px'}}>
-        <p style={{
-          color:'rgba(255,255,255,0.4)',
-          fontSize:'12px',
-          letterSpacing:'0.1em',
-          textTransform:'uppercase',
-          marginBottom:'8px'
-        }}>SESSION HISTORY</p>
-        <h1 style={{fontSize:'32px',fontWeight:'700',margin:'0 0 8px'}}>
-          Your analyses
-        </h1>
-        <p style={{color:'rgba(255,255,255,0.5)',fontSize:'14px'}}>
-          {analyses.length} records found — loaded from Supabase
-        </p>
-      </div>
+      <p style={{
+        color:'rgba(255,255,255,0.4)', fontSize:'12px',
+        letterSpacing:'0.1em', textTransform:'uppercase',
+        marginBottom:'8px'
+      }}>SESSION HISTORY</p>
+      
+      <h1 style={{
+        fontSize:'32px', fontWeight:'700', margin:'0 0 8px'
+      }}>Your analyses</h1>
+      
+      <p style={{
+        color:'rgba(255,255,255,0.5)',
+        fontSize:'14px', marginBottom:'24px'
+      }}>
+        {analyses.length} records — loaded from Supabase
+      </p>
 
       <div style={{
-        display:'flex',gap:'12px',
-        marginBottom:'24px',flexWrap:'wrap'
+        display:'flex', gap:'12px', marginBottom:'24px'
       }}>
         <input
-          type="text"
           placeholder="Search by candidate name..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
           style={{
-            flex:1, minWidth:'200px',
-            padding:'10px 16px',
+            flex:1, padding:'10px 16px',
             background:'rgba(255,255,255,0.05)',
             border:'1px solid rgba(255,255,255,0.1)',
             borderRadius:'8px', color:'white',
             fontSize:'14px', outline:'none'
           }}
         />
-        <button
-          onClick={loadHistory}
-          style={{
-            padding:'10px 20px',
-            background:'rgba(255,255,255,0.1)',
-            border:'1px solid rgba(255,255,255,0.2)',
-            borderRadius:'8px', color:'white',
-            cursor:'pointer', fontSize:'14px'
-          }}
-        >
-          🔄 Refresh
-        </button>
+        <button onClick={load} style={{
+          padding:'10px 20px',
+          background:'rgba(255,255,255,0.1)',
+          border:'1px solid rgba(255,255,255,0.2)',
+          borderRadius:'8px', color:'white',
+          cursor:'pointer'
+        }}>🔄 Refresh</button>
       </div>
 
       <div style={{
         display:'grid',
         gridTemplateColumns:'1fr 1.5fr',
-        gap:'20px',
-        alignItems:'start'
+        gap:'20px'
       }}>
         <div style={{
           background:'rgba(255,255,255,0.03)',
@@ -125,21 +96,19 @@ export default function HistoryPage() {
         }}>
           {loading ? (
             <div style={{
-              padding:'40px',textAlign:'center',
+              padding:'40px', textAlign:'center',
               color:'rgba(255,255,255,0.4)'
             }}>Loading...</div>
           ) : filtered.length === 0 ? (
             <div style={{
-              padding:'40px',textAlign:'center',
+              padding:'40px', textAlign:'center',
               color:'rgba(255,255,255,0.4)'
             }}>
-              {searchQuery ? 'No results.' :
-                'No analyses yet. Upload a resume first.'}
+              No analyses yet. Upload a resume first.
             </div>
-          ) : filtered.map((item) => {
+          ) : filtered.map(item => {
             const d = item.resume_data || {};
             const score = d.overallScore || 0;
-            const isSelected = selected?.id === item.id;
             return (
               <div
                 key={item.id}
@@ -148,46 +117,47 @@ export default function HistoryPage() {
                   padding:'16px 20px',
                   borderBottom:'1px solid rgba(255,255,255,0.06)',
                   cursor:'pointer',
-                  background: isSelected ?
+                  background: selected?.id === item.id ?
                     'rgba(255,255,255,0.08)' : 'transparent'
                 }}
               >
                 <div style={{
                   display:'flex',
                   justifyContent:'space-between',
-                  marginBottom:'6px'
+                  marginBottom:'4px'
                 }}>
-                  <span style={{fontWeight:'600',fontSize:'15px'}}>
+                  <span style={{fontWeight:'600'}}>
                     {d.candidateName || 'Unknown'}
                   </span>
                   <span style={{
-                    fontWeight:'700',fontSize:'16px',
-                    color: scoreColor(score)
+                    color: scoreColor(score),
+                    fontWeight:'700'
                   }}>{score}%</span>
                 </div>
                 <div style={{
                   fontSize:'12px',
                   color:'rgba(255,255,255,0.5)',
-                  marginBottom:'6px'
+                  marginBottom:'4px'
                 }}>{d.email || ''}</div>
                 <div style={{
                   display:'flex',
                   justifyContent:'space-between'
                 }}>
                   <span style={{
-                    fontSize:'11px',
-                    padding:'2px 8px',
+                    fontSize:'11px', padding:'2px 8px',
                     borderRadius:'20px',
-                    background: recColor(d.hiringRecommendation)+'20',
-                    color: recColor(d.hiringRecommendation),
-                    border:`1px solid ${recColor(d.hiringRecommendation)}40`
+                    background:'rgba(255,255,255,0.1)',
+                    color:'rgba(255,255,255,0.6)'
                   }}>
                     {d.hiringRecommendation || 'Review'}
                   </span>
                   <span style={{
                     fontSize:'11px',
                     color:'rgba(255,255,255,0.3)'
-                  }}>{formatDate(item.created_at)}</span>
+                  }}>
+                    {new Date(item.created_at)
+                      .toLocaleDateString()}
+                  </span>
                 </div>
               </div>
             );
@@ -204,67 +174,60 @@ export default function HistoryPage() {
             <div style={{
               display:'flex', alignItems:'center',
               justifyContent:'center', height:'300px',
-              color:'rgba(255,255,255,0.3)', fontSize:'14px'
+              color:'rgba(255,255,255,0.3)'
             }}>
               Select an analysis to view details
             </div>
           ) : (
             <div>
-              <h2 style={{
-                fontSize:'22px',fontWeight:'700',
-                margin:'0 0 4px'
-              }}>
+              <h2 style={{fontSize:'20px', fontWeight:'700',
+                margin:'0 0 8px'}}>
                 {selected.resume_data?.candidateName}
               </h2>
               <p style={{
                 color:'rgba(255,255,255,0.5)',
-                fontSize:'13px', margin:'0 0 16px'
+                fontSize:'13px', marginBottom:'16px'
               }}>
                 {selected.resume_data?.email}
-                {selected.resume_data?.phone ? 
-                  ` • ${selected.resume_data.phone}` : ''}
-                {selected.resume_data?.experienceLevel ? 
-                  ` • ${selected.resume_data.experienceLevel}` : ''}
+                {selected.resume_data?.experienceLevel &&
+                  ` • ${selected.resume_data.experienceLevel}`}
               </p>
-
+              
               <div style={{
-                display:'flex',gap:'12px',
-                flexWrap:'wrap',marginBottom:'20px'
+                display:'flex', gap:'8px',
+                marginBottom:'20px', flexWrap:'wrap'
               }}>
-                <div style={{
-                  padding:'8px 16px', borderRadius:'8px',
+                <span style={{
+                  padding:'6px 14px', borderRadius:'8px',
                   background: scoreColor(
                     selected.resume_data?.overallScore
                   )+'20',
-                  border:`1px solid ${scoreColor(
+                  color: scoreColor(
                     selected.resume_data?.overallScore
-                  )}40`,
-                  color: scoreColor(selected.resume_data?.overallScore),
-                  fontWeight:'700', fontSize:'18px'
+                  ),
+                  fontWeight:'700', fontSize:'16px'
                 }}>
-                  {selected.resume_data?.overallScore}% Score
-                </div>
-                <div style={{
-                  padding:'8px 16px', borderRadius:'8px',
+                  {selected.resume_data?.overallScore}%
+                </span>
+                <span style={{
+                  padding:'6px 14px', borderRadius:'8px',
                   background:'rgba(255,255,255,0.06)',
-                  fontSize:'13px',color:'rgba(255,255,255,0.7)'
+                  fontSize:'13px'
                 }}>
                   {selected.resume_data?.hiringRecommendation}
-                </div>
+                </span>
               </div>
 
               {selected.resume_data?.profileSummary && (
                 <div style={{marginBottom:'16px'}}>
                   <p style={{
-                    fontSize:'12px',
+                    fontSize:'11px', textTransform:'uppercase',
                     color:'rgba(255,255,255,0.4)',
-                    textTransform:'uppercase',
-                    letterSpacing:'0.08em',
                     marginBottom:'6px'
-                  }}>Profile Summary</p>
+                  }}>Summary</p>
                   <p style={{
-                    fontSize:'13px',lineHeight:'1.6',
-                    color:'rgba(255,255,255,0.8)'
+                    fontSize:'13px', lineHeight:'1.6',
+                    color:'rgba(255,255,255,0.7)'
                   }}>
                     {selected.resume_data.profileSummary}
                   </p>
@@ -274,23 +237,21 @@ export default function HistoryPage() {
               {selected.resume_data?.technicalSkills?.length > 0 && (
                 <div style={{marginBottom:'16px'}}>
                   <p style={{
-                    fontSize:'12px',
+                    fontSize:'11px', textTransform:'uppercase',
                     color:'rgba(255,255,255,0.4)',
-                    textTransform:'uppercase',
-                    letterSpacing:'0.08em',
                     marginBottom:'6px'
-                  }}>Technical Skills</p>
+                  }}>Skills</p>
                   <div style={{
-                    display:'flex',flexWrap:'wrap',gap:'6px'
+                    display:'flex', flexWrap:'wrap', gap:'6px'
                   }}>
                     {selected.resume_data.technicalSkills
                       .map((s,i) => (
                       <span key={i} style={{
-                        padding:'4px 10px',
+                        padding:'3px 8px',
                         background:'rgba(20,184,166,0.1)',
                         border:'1px solid rgba(20,184,166,0.3)',
                         borderRadius:'20px',
-                        fontSize:'12px', color:'#14b8a6'
+                        fontSize:'11px', color:'#14b8a6'
                       }}>{s}</span>
                     ))}
                   </div>
@@ -300,26 +261,22 @@ export default function HistoryPage() {
               {selected.resume_data?.workExperience?.length > 0 && (
                 <div style={{marginBottom:'16px'}}>
                   <p style={{
-                    fontSize:'12px',
+                    fontSize:'11px', textTransform:'uppercase',
                     color:'rgba(255,255,255,0.4)',
-                    textTransform:'uppercase',
-                    letterSpacing:'0.08em',
                     marginBottom:'6px'
-                  }}>Work Experience</p>
+                  }}>Experience</p>
                   {selected.resume_data.workExperience
                     .map((job,i) => (
                     <div key={i} style={{
-                      marginBottom:'10px',
-                      paddingLeft:'12px',
+                      marginBottom:'8px', paddingLeft:'10px',
                       borderLeft:'2px solid rgba(255,255,255,0.1)'
                     }}>
                       <div style={{
-                        fontWeight:'600',fontSize:'14px'
+                        fontWeight:'600', fontSize:'13px'
                       }}>{job.role}</div>
                       <div style={{
                         fontSize:'12px',
-                        color:'rgba(255,255,255,0.5)',
-                        marginBottom:'4px'
+                        color:'rgba(255,255,255,0.5)'
                       }}>
                         {job.company} • {job.duration}
                       </div>
@@ -327,42 +284,6 @@ export default function HistoryPage() {
                   ))}
                 </div>
               )}
-
-              {selected.resume_data?.strengths?.length > 0 && (
-                <div style={{marginBottom:'16px'}}>
-                  <p style={{
-                    fontSize:'12px',
-                    color:'rgba(255,255,255,0.4)',
-                    textTransform:'uppercase',
-                    letterSpacing:'0.08em',
-                    marginBottom:'6px'
-                  }}>Strengths</p>
-                  {selected.resume_data.strengths.map((s,i) => (
-                    <div key={i} style={{
-                      fontSize:'13px',
-                      color:'#22c55e',
-                      marginBottom:'4px'
-                    }}>✓ {s}</div>
-                  ))}
-                </div>
-              )}
-
-              <button
-                onClick={async () => {
-                  const { generateAnalysisReport } = 
-                    await import('@/lib/generateReport');
-                  generateAnalysisReport(selected.resume_data);
-                }}
-                style={{
-                  width:'100%', padding:'12px',
-                  background:'white', color:'black',
-                  border:'none', borderRadius:'8px',
-                  cursor:'pointer', fontWeight:'600',
-                  fontSize:'14px', marginTop:'8px'
-                }}
-              >
-                ⬇️ Download PDF Report
-              </button>
             </div>
           )}
         </div>
