@@ -603,35 +603,45 @@ export default function BatchResumeUploadPage() {
         }
 
         try {
-          const { getSupabaseClient } = await import('../../src/lib/supabaseClient');
-          const supabase = getSupabaseClient({ allowMissing: true });
-
-          if (supabase) {
-            const { data: { user } } = await supabase.auth.getUser();
-            const successfulResults = (Array.isArray(responseData?.results) ? responseData.results : [])
-              .filter((result) => result?.success && result?.data);
-
-            if (user) {
-              for (const result of successfulResults) {
+          const { getSupabaseClient } = await import('@/lib/supabaseClient');
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          const results = Array.isArray(responseData?.results) ? responseData.results : [];
+          
+          if (user && results && results.length > 0) {
+            for (const result of results) {
+              if (result.success && result.data) {
                 await supabase.from('analyses').insert({
                   id: crypto.randomUUID(),
                   user_id: user.id,
                   resume_data: {
-                    ...result.data,
-                    fileName: result.fileName,
-                    jobTitle: savedJob.jobTitle,
+                    candidateName: result.data.candidateName || 
+                      result.fileName?.replace(/\.[^/.]+$/, ''),
+                    email: result.data.email || '',
+                    phone: result.data.phone || '',
+                    overallScore: result.data.matchScore || 
+                      result.data.overallScore || 0,
+                    hiringRecommendation: result.data.recommendation || 
+                      result.data.hiringRecommendation || 'Review',
+                    experienceLevel: result.data.experienceLevel || '',
+                    technicalSkills: result.data.technicalSkills || [],
+                    matchedSkills: result.data.matchedSkills || [],
+                    missingSkills: result.data.missingSkills || [],
+                    summary: result.data.summary || '',
+                    jobTitle: jobTitle || '',
+                    companyName: companyName || '',
                     isBatchResult: true,
+                    fileName: result.fileName
                   },
                   raw_text: '',
-                  created_at: new Date().toISOString(),
+                  created_at: new Date().toISOString()
                 });
               }
-
-              console.log('Batch results saved to Supabase');
             }
+            console.log('Batch results saved to Supabase');
           }
         } catch (saveErr) {
-          console.error('Batch save error:', saveErr.message);
+          console.error('Batch Supabase save error:', saveErr.message);
         }
 
         addBatchRun(completedBatch);
