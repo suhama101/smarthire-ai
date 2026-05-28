@@ -1,45 +1,102 @@
+import crypto from 'node:crypto';
+
 import { NextResponse } from 'next/server';
+
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function getBackendBaseUrl() {
-  const value = process.env.API_URL || process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL;
+const DEFAULT_USER_ID = 'public-user';
 
-  if (!value) {
-    throw new Error('API_URL is not configured.');
-  }
+function buildResumeData(result, jobTitle, companyName) {
+  const candidate = result?.data && typeof result.data === 'object' ? result.data : result;
 
-  return value.trim().replace(/\/$/, '');
+  return {
+    candidateName: String(candidate?.candidateName || candidate?.name || result?.fileName || 'Candidate').trim(),
+    email: String(candidate?.email || '').trim(),
+    phone: String(candidate?.phone || '').trim(),
+    overallScore: Number(candidate?.matchScore ?? candidate?.overallScore ?? candidate?.score) || 0,
+    hiringRecommendation: String(candidate?.recommendation || candidate?.hiringRecommendation || 'Review').trim(),
+    experienceLevel: String(candidate?.experienceLevel || '').trim(),
+    technicalSkills: Array.isArray(candidate?.technicalSkills) ? candidate.technicalSkills : [],
+    matchedSkills: Array.isArray(candidate?.matchedSkills) ? candidate.matchedSkills : [],
+    missingSkills: Array.isArray(candidate?.missingSkills) ? candidate.missingSkills : [],
+    summary: String(candidate?.summary || '').trim(),
+    jobTitle,
+    companyName,
+    isBatchResult: true,
+    fileName: String(result?.fileName || candidate?.sourceFileName || candidate?.fileName || '').trim(),
+  };
 }
 
 export async function POST(request) {
   try {
-    const backendBaseUrl = getBackendBaseUrl();
-    const targetUrl = new URL(`${backendBaseUrl}/api/batch/save`);
+    const body = await request.json().catch(() => ({}));
+    const userId = String(body.userId || body.user_id || '').trim() || DEFAULT_USER_ID;
+    const jobDescription = String(body.jobDescription || body.job_description || '').trim();
+    const jobTitle = String(body.jobTitle || body.job_title || '').trim();
+    const companyName = String(body.companyName || body.company_name || '').trim();
+    const incomingResults = Array.isArray(body.results) ? body.results : [];
+    const incomingCandidates = Array.isArray(body.candidates) ? body.candidates : [];
 
-    const headers = new Headers(request.headers);
-    headers.delete('host');
-    headers.delete('content-length');
-    headers.delete('origin');
+    if (!jobDescription) {
+      return NextResponse.json({ error: 'jobDescription is required.' }, { status: 400 });
+    }
 
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers,
-      redirect: 'manual',
-      body: await request.text(),
-    });
+    const resultsToSave = incomingResults.length > 0
+      ? incomingResults
+      : incomingCandidates.map((candidate) => ({
+          success: true,
+          fileName: candidate?.sourceFileName || candidate?.fileName || candidate?.name || 'candidate',
+          data: candidate,
+        }));
 
-    const responseHeaders = new Headers(response.headers);
-    responseHeaders.delete('content-encoding');
-    responseHeaders.delete('transfer-encoding');
+    if (!resultsToSave.length) {
+      return NextResponse.json({ error: 'candidates must be a non-empty array.' }, { status: 400 });
+    }
 
-    return new NextResponse(await response.arrayBuffer(), {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-    });
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase credentials are not configured.' }, { status: 500 });
+    }
+
+    let savedAnalyses = 0;
+
+    for (const result of resultsToSave) {
+      if (!result?.success) {
+        continue;
+      }
+
+      const resumeData = buildResumeData(result, jobTitle, companyName);
+
+      const { error } = await supabase.from('analyses').insert({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        resume_data: resumeData,
+        raw_text: String(result?.data?.summary || result?.summary || '').trim(),
+        created_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        return NextResponse.json(
+          { error: error?.message || 'Failed to save batch run.' },
+          { status: error?.status || 500 }
+        );
+      }
+
+      savedAnalyses += 1;
+    }
+
+    return NextResponse.json(
+      {
+        message: 'Batch results saved successfully.',
+        savedAnalyses,
+      },
+      { status: 201 }
+    );
   } catch (err) {
     return NextResponse.json(
       {

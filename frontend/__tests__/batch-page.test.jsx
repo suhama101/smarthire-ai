@@ -7,6 +7,13 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
+jest.mock('../src/lib/generateReport', () => ({
+  generateAnalysisReport: jest.fn().mockResolvedValue({
+    blob: null,
+    fileName: 'batch-report.pdf',
+  }),
+}));
+
 jest.setTimeout(15000);
 
 describe('BatchResumeUploadPage', () => {
@@ -130,9 +137,13 @@ describe('BatchResumeUploadPage', () => {
         user_id: 'user-123',
         jobDescription: expect.any(String),
         job_description: expect.any(String),
+        jobTitle: 'Senior Frontend Engineer',
+        companyName: 'Acme Global',
         totalCandidates: 2,
         total_candidates: 2,
+        results: expect.any(Array),
       });
+      expect(JSON.parse(fetch.mock.calls[1][1].body).results).toHaveLength(2);
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);

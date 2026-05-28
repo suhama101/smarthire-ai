@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabaseClient';
+import { readStoredAuth } from '../../src/lib/auth-session';
 
 export default function HistoryPage() {
   const [analyses, setAnalyses] = useState([]);
@@ -13,16 +13,26 @@ export default function HistoryPage() {
 
   async function load() {
     try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      const { data } = await supabase
-        .from('analyses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      setAnalyses(data || []);
+      const session = readStoredAuth();
+      const userId = String(session?.user?.id || session?.user?.user_id || session?.user?.email || '').trim();
+
+      if (!userId) {
+        setAnalyses([]);
+        return;
+      }
+
+      const response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = await response.json();
+      setAnalyses(Array.isArray(payload?.analyses) ? payload.analyses : []);
     } catch(e) {
       console.error(e);
     } finally {
