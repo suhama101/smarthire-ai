@@ -250,7 +250,7 @@ export async function POST(req) {
   } catch (err) {
     console.error('BATCH ROUTE ERROR:', err);
 
-    return NextResponse.json(
+    return Response.json(
       {
         success: false,
         error: err?.message || 'Batch processing failed',

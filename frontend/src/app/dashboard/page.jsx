@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { readStoredAuth } from '../../lib/auth-session';
+import { getSupabaseClient } from '../../lib/supabaseClient';
 import CandidateWorkbench from './components/CandidateWorkbench';
 
 export default function DashboardPage() {
@@ -12,15 +13,37 @@ export default function DashboardPage() {
   const [role, setRole] = useState('guest');
 
   useEffect(() => {
-    const stored = readStoredAuth();
+    async function loadRole() {
+      const stored = readStoredAuth();
 
-    if (!stored?.token) {
-      router.replace('/login');
-      return;
+      if (!stored?.token) {
+        router.replace('/login');
+        return;
+      }
+
+      setIsAuthenticated(true);
+
+      let nextRole = String(stored?.user?.role || stored?.user?.user_role || stored?.user?.account_type || stored?.role || '').toLowerCase();
+
+      try {
+        const supabase = getSupabaseClient({ allowMissing: true });
+
+        if (supabase) {
+          const { data: { user } } = await supabase.auth.getUser();
+          const supabaseRole = String(user?.user_metadata?.role || user?.role || '').toLowerCase();
+
+          if (supabaseRole) {
+            nextRole = supabaseRole;
+          }
+        }
+      } catch {
+        // Keep the locally stored role when Supabase auth is unavailable.
+      }
+
+      setRole(nextRole || 'candidate');
     }
 
-    setIsAuthenticated(true);
-    setRole(String(stored?.user?.role || stored?.user?.user_role || stored?.user?.account_type || stored?.role || '').toLowerCase());
+    loadRole();
   }, [router]);
 
   if (!isAuthenticated) {

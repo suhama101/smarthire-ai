@@ -497,16 +497,15 @@ export default function BatchResumeUploadPage() {
         body: formData,
       });
 
-      const rawResponse = await response.text();
-      let responseData = null;
+      const responseClone = response.clone();
+      let responseData;
 
       try {
-        responseData = rawResponse ? JSON.parse(rawResponse) : null;
-      } catch {
-        responseData = {
-          success: false,
-          error: rawResponse || response.statusText || 'Batch failed',
-        };
+        responseData = await response.json();
+      } catch (jsonErr) {
+        const text = await responseClone.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server error: ' + text.substring(0, 100));
       }
 
       console.log('Batch response:', responseData);
@@ -602,13 +601,45 @@ export default function BatchResumeUploadPage() {
         } catch (saveError) {
           console.error('Failed to save batch run:', saveError);
         }
-      }
 
-      addBatchRun(completedBatch);
-      setBatchRun(completedBatch);
-      setProgress({ current: workingFiles.length, total: workingFiles.length, label: 'Batch analysis complete.' });
-      setIsProcessing(false);
-      return;
+        try {
+          const { getSupabaseClient } = await import('../../src/lib/supabaseClient');
+          const supabase = getSupabaseClient({ allowMissing: true });
+
+          if (supabase) {
+            const { data: { user } } = await supabase.auth.getUser();
+            const successfulResults = (Array.isArray(responseData?.results) ? responseData.results : [])
+              .filter((result) => result?.success && result?.data);
+
+            if (user) {
+              for (const result of successfulResults) {
+                await supabase.from('analyses').insert({
+                  id: crypto.randomUUID(),
+                  user_id: user.id,
+                  resume_data: {
+                    ...result.data,
+                    fileName: result.fileName,
+                    jobTitle: savedJob.jobTitle,
+                    isBatchResult: true,
+                  },
+                  raw_text: '',
+                  created_at: new Date().toISOString(),
+                });
+              }
+
+              console.log('Batch results saved to Supabase');
+            }
+          }
+        } catch (saveErr) {
+          console.error('Batch save error:', saveErr.message);
+        }
+
+        addBatchRun(completedBatch);
+        setBatchRun(completedBatch);
+        setProgress({ current: workingFiles.length, total: workingFiles.length, label: 'Batch analysis complete.' });
+        setIsProcessing(false);
+        return;
+      }
     } catch (itemError) {
       const message = itemError?.message || 'Batch analysis failed';
       setFiles((current) => current.map((item) => (item.status === 'Done' ? item : { ...item, status: 'Failed', error: message })));

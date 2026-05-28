@@ -99,7 +99,7 @@ export async function POST(request) {
       }
 
       const token = generateToken(newUser);
-      return NextResponse.json({ token, user: newUser }, { status: 201 });
+      return NextResponse.json({ token, user: { ...newUser, user_metadata: { role } } }, { status: 201 });
     }
 
     const existingQuery = supabase
@@ -128,7 +128,7 @@ export async function POST(request) {
     }
 
     const token = generateToken(newUser);
-    return NextResponse.json({ token, user: newUser }, { status: 201 });
+    return NextResponse.json({ token, user: { ...newUser, user_metadata: { role } } }, { status: 201 });
   } catch (err) {
     return NextResponse.json(
       { error: err?.message || 'Signup failed. Please try again.' },

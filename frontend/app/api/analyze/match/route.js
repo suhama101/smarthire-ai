@@ -108,7 +108,7 @@ async function getGroqMatchResult({ resumeSnapshot, jobTitle, jobDescription }) 
 
   const groq = new Groq({ apiKey });
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL || 'llama3-8b-8192',
+    model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
     temperature: 0.1,
     max_tokens: 1200,
     messages: [
