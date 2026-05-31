@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
@@ -19,6 +19,26 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseClient();
+    const { data } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setSessionReady(true);
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (sessionData?.session) {
+        setSessionReady(true);
+      }
+    });
+
+    return () => {
+      data.subscription.unsubscribe();
+    };
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -40,6 +60,12 @@ export default function ResetPasswordPage() {
 
     if (trimmedNewPassword !== trimmedConfirmPassword) {
       setError('Passwords do not match.');
+      setMessage('');
+      return;
+    }
+
+    if (!sessionReady) {
+      setError('Password reset session is not ready yet. Please open the link from your email again.');
       setMessage('');
       return;
     }
