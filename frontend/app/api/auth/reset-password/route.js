@@ -4,22 +4,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function getBackendBaseUrl() {
-  const value = process.env.API_URL || process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL;
-
-  if (!value) {
-    throw new Error('API_URL is not configured.');
-  }
-
-  return value.trim().replace(/\/$/, '');
-}
+const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').trim().replace(/\/$/, '');
 
 export async function POST(request) {
-  const backendBaseUrl = getBackendBaseUrl();
-  const targetUrl = `${backendBaseUrl}/api/auth/reset-password`;
   const body = await request.json().catch(() => ({}));
 
-  const response = await fetch(targetUrl, {
+  const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
