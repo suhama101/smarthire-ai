@@ -158,6 +158,31 @@ export async function getResetToken(token) {
     return null;
   }
 
+  return {
+    ...data,
+    userId: data.user_id,
+  };
+}
+
+export async function updateUserPassword(userId, newHashedPassword) {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ password_hash: newHashedPassword })
+    .eq('id', userId)
+    .select('id, email, full_name, role, created_at')
+    .maybeSingle();
+
+  const mappedError = mapSupabaseError(error, 'Failed to update password.');
+  if (mappedError) {
+    throw mappedError;
+  }
+
+  if (!data) {
+    throw Object.assign(new Error('User not found.'), { status: 404, code: 'USER_NOT_FOUND' });
+  }
+
   return data;
 }
 
