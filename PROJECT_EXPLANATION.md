@@ -10,19 +10,19 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 - Main workflow (start-to-finish):
   1. User signs up / logs in via the auth API. See [backend/controllers/authController.js](backend/controllers/authController.js).
   2. User uploads a resume (PDF/DOCX/TXT/MD) via the frontend form which calls the API route `/api/resume/analyze` or backend `/api/analyze/resume` depending on deployment. See `frontend/app/api/resume/analyze/route.js` and [backend/routes/analyze.js](backend/routes/analyze.js).
-  3. The server extracts text (`backend/services/resumeParser.js`), optionally converts to markdown, and sends the text to an LLM (Groq/GROQ API) via `frontend/src/lib/groqClient.js` or `backend/services/claudeService.js` (Groq SDK wrapper) for structured parsing.
+  3. The server extracts text (`backend/services/resumeParser.js`), optionally converts to markdown, and sends the text to an LLM (Groq/GROQ API) via `frontend/src/lib/groqClient.js` or `backend/services/groqService.js` (Groq SDK wrapper) for structured parsing.
   4. Parsed resume data is normalized and saved to Supabase (or an in-memory fallback) using [`backend/services/db.js`](backend/services/db.js) and [`backend/services/supabaseClient.js`](backend/services/supabaseClient.js).
-  5. User can run a job match by submitting a job description. The system calls the Groq model to compute a match (see `frontend/app/api/analyze/match/route.js` and `backend/services/claudeService.js`).
+  5. User can run a job match by submitting a job description. The system calls the Groq model to compute a match (see `frontend/app/api/analyze/match/route.js` and `backend/services/groqService.js`).
   6. Match results and analyses are returned to the UI, and optionally saved to Supabase.
 
 **2) What are all the features?** (file references and short technical explanation)
 - Signup / Login: `backend/controllers/authController.js` — creates users in Supabase (or in-memory) and issues JWTs using `jsonwebtoken`, password hashing using `bcryptjs`.
 - Profile fetch/update: `backend/controllers/authController.js` + `backend/middleware/auth.js` — JWT-protected endpoints to read/update profile and stats from Supabase.
 - Resume upload & parsing: `backend/middleware/upload.js` and `backend/services/resumeParser.js` — Multer-based upload and `pdf-parse` / `mammoth` fallback to extract text.
-- Resume analysis (AI): `frontend/app/api/resume/analyze/route.js` and `backend/services/claudeService.js` — Calls Groq (via `groq-sdk`) to parse resume into structured JSON; fallback heuristics apply if API key missing.
+- Resume analysis (AI): `frontend/app/api/resume/analyze/route.js` and `backend/services/groqService.js` — Calls Groq (via `groq-sdk`) to parse resume into structured JSON; fallback heuristics apply if API key missing.
 - Resume markdown conversion: `frontend/app/api/resume/analyze/route.js` uses `analyzeWithGroq` to convert text to Markdown for display.
-- Job matching: `frontend/app/api/analyze/match/route.js` and `backend/services/claudeService.js` — Sends resume snapshot + job description to Groq to produce a match score and matched/missing skills.
-- Learning plan generation: `backend/services/claudeService.js` & `backend/routes/analyze.js` — Creates personalized learning plan JSON from missing skills via the Groq model or a deterministic fallback.
+- Job matching: `frontend/app/api/analyze/match/route.js` and `backend/services/groqService.js` — Sends resume snapshot + job description to Groq to produce a match score and matched/missing skills.
+- Learning plan generation: `backend/services/groqService.js` & `backend/routes/analyze.js` — Creates personalized learning plan JSON from missing skills via the Groq model or a deterministic fallback.
 - Batch resume upload & bulk matching: `frontend/app/batch/page.jsx`, `frontend/app/api/batch/route.js`, and backend batch routes — multiple resumes processed in sequence and results aggregated and saved with `backend/services/db.js`.
 - Save analyses & matches: `frontend/app/api/resume/analyze/route.js` & `backend/services/db.js` — save results into `analyses` and `job_matches` tables in Supabase.
 - Proxy to backend for non-local routes: `frontend/app/api/[...path]/route.js` — proxies requests to a separate backend service when necessary, allowing the Next.js app to call the external `backend/` server.
@@ -34,7 +34,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 - Frontend: Next.js (app directory, React) — UI, server-side API routes and proxying. Chosen for fast React + server route integration. Files under `frontend/app` and `frontend/src`.
 - Backend: Node.js + Express (`backend/server.js`, `backend/routes/*`) — API endpoints for analysis, auth, batch operations; separation offers run-anywhere server.
 - Database: Supabase (Postgres) via `@supabase/supabase-js` (`backend/services/supabaseClient.js`) — primary persistent store for users, analyses, matches.
-- AI: Groq SDK (`groq-sdk`) used in `frontend/src/lib/groqClient.js` and `backend/services/claudeService.js` — interacts with GROQ/Gemini-style or Anthropic-like APIs to parse resumes, match jobs, and create learning plans. A single env var `GROQ_API_KEY` controls configuration.
+- AI: Groq SDK (`groq-sdk`) used in `frontend/src/lib/groqClient.js` and `backend/services/groqService.js` — interacts with GROQ/Gemini-style or Anthropic-like APIs to parse resumes, match jobs, and create learning plans. A single env var `GROQ_API_KEY` controls configuration.
 - Authentication: JWT tokens (`jsonwebtoken`) and password hashing (`bcryptjs`) in `backend/controllers/authController.js` with middleware in `backend/middleware/auth.js`.
 - File parsing: `pdf-parse` (backend), `pdf2json` (frontend analyze route), `mammoth` for DOCX — used for extracting text from uploaded files.
 - Uploads: `multer` (backend `upload.js`) and `busboy` (frontend API route that handles multipart in Edge/Node runtime).
@@ -45,7 +45,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 - Groq / GROQ_API_KEY (`groq-sdk`): used for resume parsing, conversion to Markdown, job matching, and learning plan generation. Called in:
   - `frontend/src/lib/groqClient.js` (function `analyzeWithGroq`) — messages sent: prompt text; receives unstructured or JSON text.
   - `frontend/app/api/analyze/match/route.js` and `frontend/app/api/resume/analyze/route.js` — send prompts and receive parsed JSON or text.
-  - `backend/services/claudeService.js` — uses `Groq` client: `getClient().chat.completions.create` and expects structured JSON response.
+  - `backend/services/groqService.js` — uses `Groq` client: `getClient().chat.completions.create` and expects structured JSON response.
 - Supabase (`@supabase/supabase-js`): used as database and optional auth verification in `frontend/app/api/resume/analyze/route.js` saving analysis; server-side calls in `backend/services/supabaseClient.js` and `backend/services/db.js`. Data sent/received: insert/select rows for `users`, `analyses`, `job_matches`, `batch_runs`.
 - pdf parsers: `pdf-parse` (backend/services/resumeParser.js) and `pdf2json` (frontend route) — file bytes uploaded are converted to plain text.
 - Mammoth (`mammoth`): DOCX -> text in both backend and frontend routes.
@@ -62,16 +62,16 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 2. Request handling: Next.js route uses `busboy` to parse the multipart stream (`frontend/app/api/resume/analyze/route.js`); Express route uses `multer` middleware (`backend/middleware/upload.js`).
 3. Text extraction: `pdf2json` or `pdf-parse` or `mammoth` extracts plain text (`extractTextFromUpload` / `backend/services/resumeParser.js`).
 4. Optionally convert to Markdown using `analyzeWithGroq` (`frontend/src/lib/groqClient.js`) for nicer display.
-5. LLM analysis: the text is sent to Groq (via `analyzeWithGroq` or `backend/services/claudeService.extractResumeData`) with a prompt that requests structured JSON. The model returns JSON which is parsed (code has robust parsing `parseModelJsonOrFallback` / `parseJsonResponse`).
-6. Normalization & validation: the raw parsed JSON is normalized (`normalizeResumeData` in Groq client and `claudeService.normalizeResumeData`) and validated; if missing or malformed, fallback heuristics extract skills and basic fields.
+5. LLM analysis: the text is sent to Groq (via `analyzeWithGroq` or `backend/services/groqService.extractResumeData`) with a prompt that requests structured JSON. The model returns JSON which is parsed (code has robust parsing `parseModelJsonOrFallback` / `parseJsonResponse`).
+6. Normalization & validation: the raw parsed JSON is normalized (`normalizeResumeData` in Groq client and `groqService.normalizeResumeData`) and validated; if missing or malformed, fallback heuristics extract skills and basic fields.
 7. Save & respond: normalized `resumeData` is saved to Supabase `analyses` table by `backend/services/db.saveAnalysis`, and the API returns the analysis plus `analysisId` to the client for later job matching.
 
 **7) How does job matching work? (step-by-step)**
 1. User submits a job description via UI for a selected analysis (requires `analysisId`). Frontend calls `/api/analyze/match` or `frontend/app/api/analyze/match/route.js`.
 2. Server fetches stored analysis from Supabase (`backend/services/db.getAnalysisById`) to retrieve `resume_data` and `raw_text`.
-3. The server builds a match prompt including a resume snapshot and the job description (`buildMatchPrompt`), sends it to Groq (`getGroqMatchResult` in `frontend/app/api/analyze/match/route.js` or `backend/services/claudeService.matchJobDescription`).
+3. The server builds a match prompt including a resume snapshot and the job description (`buildMatchPrompt`), sends it to Groq (`getGroqMatchResult` in `frontend/app/api/analyze/match/route.js` or `backend/services/groqService.matchJobDescription`).
 4. The model returns structured JSON with `matchScore`, `matchedSkills`, `missingSkills`, `recommendation`, etc. Parsing logic (`parseJsonResponse` / `parseModelJsonOrFallback`) extracts JSON reliably.
-5. The match is normalized via `normalizeMatchResult` or `normalizeMatchResult` in `claudeService` and saved to `job_matches` (`backend/services/db.saveJobMatch`).
+5. The match is normalized via `normalizeMatchResult` or `normalizeMatchResult` in `groqService` and saved to `job_matches` (`backend/services/db.saveJobMatch`).
 6. The client receives the match result and displays the overall score and breakdown.
 
 **8) Complete folder structure (important files + one-line description)**
@@ -83,7 +83,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
   - `controllers/authController.js` — signup/login/profile logic
   - `middleware/auth.js` — JWT verification middleware
   - `middleware/upload.js` — file upload (multer) settings
-  - `services/claudeService.js` — Groq model integration, parsing, matching, learning plan
+  - `services/groqService.js` — Groq model integration, parsing, matching, learning plan
   - `services/supabaseClient.js` — creates Supabase client or in-memory fallback
   - `services/db.js` — DB actions (saveAnalysis, saveJobMatch, etc.)
   - `services/resumeParser.js` — PDF/DOCX/text extraction
@@ -109,8 +109,8 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 - `SUPABASE_URL` (backend/services/supabaseClient.js, frontend/app/api/resume/analyze/route.js) — Supabase project URL.
 - `SUPABASE_SERVICE_ROLE_KEY` (backend/services/supabaseClient.js, frontend/app/api/resume/analyze/route.js) — Supabase service role key used server-side for writes.
 - `SUPABASE_ANON_KEY` (backend/services/supabaseClient.js) — optional anon key fallback.
-- `GROQ_API_KEY` (frontend/src/lib/groqClient.js, backend/services/claudeService.js, frontend/API routes) — API key for Groq model. If missing, the app uses deterministic fallbacks.
-- `GROQ_MODEL` (frontend/src/lib/groqClient.js, backend/services/claudeService.js) — model identifier to call (e.g., `llama-3.1-8b-instant` or `llama-3.3-70b-versatile`).
+- `GROQ_API_KEY` (frontend/src/lib/groqClient.js, backend/services/groqService.js, frontend/API routes) — API key for Groq model. If missing, the app uses deterministic fallbacks.
+- `GROQ_MODEL` (frontend/src/lib/groqClient.js, backend/services/groqService.js) — model identifier to call (e.g., `llama-3.1-8b-instant` or `llama-3.3-70b-versatile`).
 - `API_URL` / `BACKEND_API_URL` / `NEXT_PUBLIC_API_URL` (frontend/app/api/[...path]/route.js, frontend/.env.example) — URL of separate backend server used by proxy routes.
 - `PORT` (backend/server.js) — backend server port.
 - `NODE_ENV` (many files) — production/test behavior branches.
@@ -120,9 +120,9 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 
 **10) Known limitations / incomplete features**
 - Dual deployment complexity: The repo contains both `frontend` Next.js app and a separate `backend` Express app. The Next.js app includes proxy routes to either use its own handler or forward to `backend/` depending on `API_URL`. This needs careful deployment configuration (see `frontend/app/api/[...path]/route.js`).
-- Partial duplicate logic: Resume parsing and match logic is present in both frontend API routes (Next.js server routes) and backend services (Express + `claudeService.js`) which can be confusing and duplicated maintenance.
+- Partial duplicate logic: Resume parsing and match logic is present in both frontend API routes (Next.js server routes) and backend services (Express + `groqService.js`) which can be confusing and duplicated maintenance.
 - Tests: There are tests under `backend/__tests__` and `frontend/__tests__` but running them may require environment configuration (keys). Some tests may be flaky if Groq keys are missing.
-- Robustness of parsing: The Groq model is expected to return strict JSON but the code contains many fallback and heuristics because models sometimes return non-JSON wrappers — parsing may still fail for noisy resumes. See `parseModelJsonOrFallback` in `backend/services/claudeService.js` and `parseJsonResponse` in `frontend/app/api/resume/analyze/route.js`.
+- Robustness of parsing: The Groq model is expected to return strict JSON but the code contains many fallback and heuristics because models sometimes return non-JSON wrappers — parsing may still fail for noisy resumes. See `parseModelJsonOrFallback` in `backend/services/groqService.js` and `parseJsonResponse` in `frontend/app/api/resume/analyze/route.js`.
 - Security: `frontend` route saves to Supabase using a service key; by default on Vercel this is safe but must not be exposed in browser builds. Ensure env var usage is server-side only.
 - Rate limiting: Basic rate-limiting exists but may need strengthening for production, particularly batch endpoints that can send many LLM calls.
 - No background job queue: Batch processing is synchronous in the frontend; large batches may time out or be slow without job queues or serverless background workers.
@@ -134,7 +134,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 
 3. Q: Which files are responsible for extracting text from uploaded PDFs and DOCX files? A: `backend/services/resumeParser.js` uses `pdf-parse` and `mammoth`; `frontend/app/api/resume/analyze/route.js` uses `pdf2json` and `mammoth`/`extractDocxText`.
 
-4. Q: How does the project call the LLM and which function centralizes that call? A: The Groq client wrapper `frontend/src/lib/groqClient.js` defines `analyzeWithGroq(prompt)` which uses `groq-sdk` to call `chat.completions.create`. Back-end also uses this directly in `backend/services/claudeService.js` via `new Groq({ apiKey })`.
+4. Q: How does the project call the LLM and which function centralizes that call? A: The Groq client wrapper `frontend/src/lib/groqClient.js` defines `analyzeWithGroq(prompt)` which uses `groq-sdk` to call `chat.completions.create`. Back-end also uses this directly in `backend/services/groqService.js` via `new Groq({ apiKey })`.
 
 5. Q: Where is resume analysis saved to the database and which function performs it? A: `backend/services/db.saveAnalysis(userId, resumeData, rawText)` inserts rows into `analyses` table; `backend/routes/analyze.js` calls this after parsing.
 
@@ -156,7 +156,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 
 14. Q: Which env var enables seeding demo data, and where is it used? A: `SMART_HIRE_SEED_DEMO` in `backend/server.js` — when set to `'1'` it calls `seedDemoDataIfEmpty('demo-user')`.
 
-15. Q: How are AI fallback heuristics implemented when the `GROQ_API_KEY` is missing? A: Both `frontend/app/api/resume/analyze/route.js` and `backend/services/claudeService.js` implement deterministic fallback functions (`extractFallbackProfile`, `buildFallbackResumeData`, `buildFallbackMatchResult`) that use regex and token lists to extract skills and construct conservative match results.
+15. Q: How are AI fallback heuristics implemented when the `GROQ_API_KEY` is missing? A: Both `frontend/app/api/resume/analyze/route.js` and `backend/services/groqService.js` implement deterministic fallback functions (`extractFallbackProfile`, `buildFallbackResumeData`, `buildFallbackMatchResult`) that use regex and token lists to extract skills and construct conservative match results.
 
 --
 
@@ -165,3 +165,4 @@ If you want, I can now:
 - commit and push this file to the remote repository.
 
 File created: PROJECT_EXPLANATION.md
+
