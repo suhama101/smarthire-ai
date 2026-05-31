@@ -3,14 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-function createSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -19,25 +11,16 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [sessionReady, setSessionReady] = useState(false);
+  const [token, setToken] = useState('');
 
   useEffect(() => {
-    const supabase = createSupabaseClient();
-    const { data } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true);
-      }
-    });
+    const params = new URLSearchParams(window.location.search);
+    const resetToken = params.get('token') || '';
+    setToken(resetToken);
 
-    supabase.auth.getSession().then(({ data: sessionData }) => {
-      if (sessionData?.session) {
-        setSessionReady(true);
-      }
-    });
-
-    return () => {
-      data.subscription.unsubscribe();
-    };
+    if (!resetToken) {
+      setError('Reset token is missing. Open the link from your email again.');
+    }
   }, []);
 
   async function handleSubmit(event) {
@@ -64,8 +47,8 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!sessionReady) {
-      setError('Password reset session is not ready yet. Please open the link from your email again.');
+    if (!token) {
+      setError('Reset token is missing. Open the link from your email again.');
       setMessage('');
       return;
     }
@@ -75,17 +58,22 @@ export default function ResetPasswordPage() {
     setMessage('');
 
     try {
-      const supabase = createSupabaseClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password: trimmedNewPassword });
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, newPassword: trimmedNewPassword }),
+      });
 
-      if (updateError) {
-        throw updateError;
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to update password.');
       }
 
       setMessage('Password updated! Redirecting to login...');
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
+      router.push('/login');
     } catch (submitError) {
       setError(submitError?.message || 'Unable to update password.');
     } finally {

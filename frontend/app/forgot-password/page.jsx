@@ -2,14 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
-
-function createSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -33,30 +25,25 @@ export default function ForgotPasswordPage() {
     setMessage('');
 
     try {
-      const supabase = createSupabaseClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: 'https://smarthire-ai-lrq8.vercel.app/reset-password',
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: trimmedEmail }),
       });
 
-      if (resetError) {
-        const errorMessage = String(resetError.message || 'Unable to send reset link.').toLowerCase();
-        if (errorMessage.includes('not found') || errorMessage.includes('user not found') || errorMessage.includes('email not found')) {
-          setError('Email not found.');
-        } else {
-          setError(resetError.message || 'Unable to send reset link.');
-        }
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(data?.error || 'Unable to send reset link.');
         return;
       }
 
       setMessage('Reset link sent! Check your email.');
       setEmail('');
     } catch (submitError) {
-      const messageText = String(submitError?.message || 'Unable to send reset link.');
-      if (messageText.toLowerCase().includes('not found')) {
-        setError('Email not found.');
-      } else {
-        setError(messageText);
-      }
+      setError(String(submitError?.message || 'Unable to send reset link.'));
     } finally {
       setBusy(false);
     }

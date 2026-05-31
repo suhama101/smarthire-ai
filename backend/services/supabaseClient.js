@@ -35,6 +35,11 @@ function createMemoryClient() {
         state.insertRows = Array.isArray(payload) ? payload : [payload];
         return this;
       },
+      update(payload) {
+        state.mode = 'update';
+        state.updateData = { ...(payload || {}) };
+        return this;
+      },
       delete() {
         state.mode = 'delete';
         return this;
@@ -85,6 +90,18 @@ function createMemoryClient() {
           }
           const [removed] = rows.splice(idx, 1);
           return { data: removed || null, error: null };
+        }
+
+        if (state.mode === 'update') {
+          const matcher = makeFilterMatcher(state.filters);
+          const row = rows.find(matcher);
+
+          if (!row) {
+            return { data: null, error: null };
+          }
+
+          Object.assign(row, state.updateData || {});
+          return { data: row, error: null };
         }
 
         const matcher = makeFilterMatcher(state.filters);
