@@ -82,10 +82,10 @@ const JOB_DESCRIPTION_MEANINGFUL_TERMS = new Set([
   'communication',
 ]);
 
-class ClaudeIntegrationError extends Error {
+class GroqIntegrationError extends Error {
   constructor(message, status = 502) {
     super(message);
-    this.name = 'ClaudeIntegrationError';
+    this.name = 'GroqIntegrationError';
     this.status = status;
   }
 }
@@ -112,7 +112,7 @@ function getClient() {
   const apiKey = (process.env.GROQ_API_KEY || '').trim();
 
   if (!apiKey || apiKey === 'your_key_here') {
-    throw new ClaudeIntegrationError('Missing GROQ_API_KEY in backend .env', 500);
+    throw new GroqIntegrationError('Missing GROQ_API_KEY in backend .env', 500);
   }
 
   if (!client) {
@@ -122,7 +122,7 @@ function getClient() {
   return client;
 }
 
-function isAnthropicConfigured() {
+function isGroqConfigured() {
   const apiKey = (process.env.GROQ_API_KEY || '').trim();
   return Boolean(apiKey && apiKey !== 'your_key_here');
 }
@@ -276,7 +276,7 @@ function buildFallbackMatchResult(resumeData, jobDescription) {
   };
 }
 
-function getClaudeText(response) {
+function getGroqText(response) {
   const directText = response?.choices?.[0]?.message?.content;
 
   if (typeof directText === 'string' && directText.trim()) {
@@ -292,11 +292,11 @@ function getClaudeText(response) {
   return textChunks.join('\n').trim();
 }
 
-function parseClaudeJson(response) {
-  const text = getClaudeText(response);
+function parseGroqJson(response) {
+  const text = getGroqText(response);
 
   if (!text) {
-    throw new ClaudeIntegrationError('Claude returned an empty response', 502);
+    throw new GroqIntegrationError('Groq returned an empty response', 502);
   }
 
   const clean = text.replace(/```json|```/gi, '').trim();
@@ -309,11 +309,11 @@ function parseClaudeJson(response) {
       try {
         return JSON.parse(jsonMatch[0]);
       } catch (nestedErr) {
-        throw new ClaudeIntegrationError('Claude response was not valid JSON', 502);
+        throw new GroqIntegrationError('Groq response was not valid JSON', 502);
       }
     }
 
-    throw new ClaudeIntegrationError('Claude response did not contain JSON', 502);
+    throw new GroqIntegrationError('Groq response did not contain JSON', 502);
   }
 }
 
@@ -656,8 +656,8 @@ function parseModelJsonOrFallback(response, options) {
   const { flowName, fallbackFactory } = options;
 
   try {
-    const raw = parseClaudeJson(response);
-    const text = getClaudeText(response);
+    const raw = parseGroqJson(response);
+    const text = getGroqText(response);
     const clean = String(text || '').replace(/```json|```/gi, '').trim();
 
     if (clean && (clean.startsWith('{') || clean.endsWith('}'))) {
@@ -680,29 +680,29 @@ function parseModelJsonOrFallback(response, options) {
 
 function validateResumeDataShape(data) {
   if (!data.summary || data.summary.length < 10) {
-    throw new ClaudeIntegrationError('Claude response is missing a valid summary', 502);
+    throw new GroqIntegrationError('Groq response is missing a valid summary', 502);
   }
 
   if (!Array.isArray(data.technicalSkills) || data.technicalSkills.length === 0) {
-    throw new ClaudeIntegrationError('Claude response is missing technical skills', 502);
+    throw new GroqIntegrationError('Groq response is missing technical skills', 502);
   }
 }
 
-function mapAnthropicError(err) {
-  if (err instanceof ClaudeIntegrationError) {
+function mapGroqError(err) {
+  if (err instanceof GroqIntegrationError) {
     return err;
   }
 
   const status = Number(err?.status || err?.response?.status) || 502;
   const message = err?.message || 'Groq request failed';
-  return new ClaudeIntegrationError(message, status);
+  return new GroqIntegrationError(message, status);
 }
 
 /**
  * Extract structured skills and profile from raw resume text
  */
 async function extractResumeData(resumeText) {
-  if (!isAnthropicConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Resume analysis using fallback mode', {
       reason: 'GROQ_API_KEY is missing or empty',
       resumeLength: String(resumeText || '').length,
@@ -763,7 +763,7 @@ ${promptResumeText}`;
 
     const response = await getClient().chat.completions.create({
       model: GROQ_MODEL,
-      max_tokens: 1500,
+      max_tokens: 2000,
       temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
@@ -794,7 +794,7 @@ ${promptResumeText}`;
     logAiDebug('Resume analysis parsed result', normalized);
     return normalized;
   } catch (err) {
-    throw mapAnthropicError(err);
+    throw mapGroqError(err);
   }
 }
 
@@ -804,7 +804,7 @@ ${promptResumeText}`;
 async function matchJobDescription(resumeData, jobDescription, jobTitle = 'Unknown') {
   const fallbackMatch = buildFallbackMatchResult(resumeData, jobDescription);
 
-  if (!isAnthropicConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Job matching using fallback mode', {
       reason: 'GROQ_API_KEY is missing or empty',
       jobDescriptionLength: String(jobDescription || '').length,
@@ -862,7 +862,7 @@ Return this exact JSON:
 
     const response = await getClient().chat.completions.create({
       model: GROQ_MODEL,
-      max_tokens: 1500,
+      max_tokens: 2000,
       temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
@@ -915,7 +915,7 @@ Return this exact JSON:
  * Generate a personalized learning plan to close skills gaps
  */
 async function generateLearningPlan(missingSkills, targetRole, currentLevel) {
-  if (!isAnthropicConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Learning plan using fallback mode', {
       reason: 'GROQ_API_KEY is missing or empty',
       missingSkills,
@@ -975,7 +975,7 @@ Return JSON with exactly this structure:
 
     const response = await getClient().chat.completions.create({
       model: GROQ_MODEL,
-      max_tokens: 1200,
+      max_tokens: 2000,
       temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
@@ -1006,8 +1006,8 @@ Return JSON with exactly this structure:
     logAiDebug('Learning plan parsed result', normalized);
     return normalized;
   } catch (err) {
-    throw mapAnthropicError(err);
+    throw mapGroqError(err);
   }
 }
 
-module.exports = { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured, isMeaningfulJobDescription };
+module.exports = { extractResumeData, matchJobDescription, generateLearningPlan, isGroqConfigured, isMeaningfulJobDescription };

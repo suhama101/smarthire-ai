@@ -1,4 +1,0 @@
-John Doe
-john.doe@example.com
-Software engineer with React, Node.js, PostgreSQL, Docker, AWS.
-

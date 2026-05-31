@@ -20,11 +20,11 @@ The current codebase also includes a local session history layer, role-based acc
 | Frontend | Next.js 14.2.3, React 18.3.1, Tailwind CSS, Recharts, Lucide React | UI, routing, dashboard pages, local auth session, frontend API routes |
 | Backend | Express 5.2.1, Multer, bcryptjs, jsonwebtoken, Zod | Authentication, file handling, resume analysis, batch ranking, persistence |
 | Database | Supabase PostgreSQL | Stores users, analyses, and job matches |
-| AI | Groq SDK on the backend, Gemini on the Next.js API routes | Resume extraction, job matching, learning plans, batch ranking |
+| AI | Groq SDK (`groq-sdk`) | Resume extraction, job matching, learning plans, batch ranking |
 | Parsing | pdf-parse, mammoth, Busboy | Reads PDF and DOCX files and handles multipart uploads |
 | Testing | Jest, Supertest, Testing Library | Backend route tests and frontend page/component tests |
 
-Important note: `backend/services/claudeService.js` is a legacy filename. The current backend AI provider is Groq, not Anthropic.
+Important note: the active AI provider is Groq, and the codebase uses `llama-3.3-70b-versatile` as the shared default model.
 
 ## Architecture
 
@@ -71,8 +71,6 @@ That split is intentional. It lets the UI use local API handlers where needed wh
 smarthire-ai/
 	backend/
 		server.js
-		Procfile
-		nixpacks.toml
 		supabase-schema.sql
 		controllers/authController.js
 		middleware/auth.js
@@ -81,7 +79,7 @@ smarthire-ai/
 		routes/analyze.js
 		routes/batch.js
 		routes/debug.js
-		services/claudeService.js
+		services/groqService.js
 		services/db.js
 		services/resumeParser.js
 		services/supabaseClient.js
@@ -111,7 +109,6 @@ smarthire-ai/
 		jest.config.js
 		jest.setup.js
 		__tests__/
-	nixpacks.toml
 	README.md
 	TESTING.md
 ```
@@ -135,7 +132,7 @@ Key files worth reading first:
 | --- | --- | --- | --- |
 | GET | `/api/health` | Checks the deployed runtime | Used by the homepage status card |
 | POST | `/api/resume/analyze` | Extracts structured data from one resume | Accepts multipart form-data with `resume` |
-| POST | `/api/job/match` | Compares a candidate profile against a job description | Uses Gemini when `GEMINI_API_KEY` is present, otherwise falls back |
+| POST | `/api/job/match` | Compares a candidate profile against a job description | Uses Groq and falls back to deterministic scoring when unavailable |
 | POST | `/api/learning/plan` | Builds a skill-gap learning plan | Uses the match result and candidate profile |
 | POST | `/api/batch/analyze` | Ranks multiple resumes against one job description | Accepts multipart form-data with multiple `resumes` files |
 | ANY | `/api/[...path]` | Proxies unmatched frontend API calls to the backend | Uses `NEXT_PUBLIC_API_URL`, `VITE_API_URL`, or `BACKEND_API_URL` |
@@ -190,7 +187,7 @@ Supported file types across the app:
 Parsing details:
 
 - `backend/services/resumeParser.js` extracts text from uploaded files and cleans the result.
-- The Next.js API routes also extract text locally when they need to call Gemini.
+- The Next.js API routes also extract text locally when they need to call Groq.
 - The code rejects scanned or image-only PDFs when text extraction is too short.
 
 ## AI and Fallback Logic
@@ -199,7 +196,7 @@ There are two AI paths in the repo.
 
 ### Backend AI path
 
-The backend uses Groq in `backend/services/claudeService.js` to:
+The backend uses Groq in `backend/services/groqService.js` to:
 
 - Extract resume data
 - Match a resume to a job description
@@ -209,14 +206,14 @@ If the Groq API is not available, the backend falls back to deterministic heuris
 
 ### Frontend AI path
 
-The Next.js API routes use Gemini through `@google/generative-ai` to:
+The Next.js API routes use Groq through `groq-sdk` to:
 
 - Extract resume data
 - Match a candidate profile to a job description
 - Generate a learning plan
 - Rank multiple resumes in batch mode
 
-If `GEMINI_API_KEY` is missing, the frontend routes also fall back to heuristic logic.
+If `GROQ_API_KEY` is missing, the frontend routes also fall back to heuristic logic.
 
 ## Database Schema
 
@@ -259,10 +256,10 @@ Indexes exist for `users.email`, `analyses.user_id`, `job_matches.user_id`, and 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_API_URL` | Yes for proxy routes | Backend base URL used by `frontend/app/api/[...path]/route.js` |
-| `VITE_API_URL` | Optional alias | Alternate backend base URL alias |
-| `BACKEND_API_URL` | Optional alias | Alternate backend base URL alias |
-| `GEMINI_API_KEY` | Yes for Gemini routes | Enables the Next.js resume, match, learning plan, and batch AI routes |
-| `GEMINI_MODEL` | Optional | Gemini model name, defaults to `gemini-2.5-flash` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes for frontend auth/storage helpers | Supabase project URL used by the client |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes for frontend auth/storage helpers | Supabase anon key used by the client |
+| `GROQ_API_KEY` | Yes | Enables the Groq-powered resume, match, learning plan, and batch routes |
+| `GROQ_MODEL` | Optional | Groq model name, defaults to `llama-3.3-70b-versatile` |
 
 ### Backend
 
@@ -276,7 +273,7 @@ Indexes exist for `users.email`, `analyses.user_id`, `job_matches.user_id`, and 
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes in production | Supabase admin key for server operations |
 | `SUPABASE_ANON_KEY` | Optional | Used as a fallback if the service role key is not set |
 | `CORS_ORIGINS` | Yes in production | Comma-separated allowed frontend origins |
-| `GROQ_API_KEY` | Optional | Enables Groq-based backend AI |
+| `GROQ_API_KEY` | Yes | Enables Groq-based backend AI |
 | `GROQ_MODEL` | Optional | Defaults to `llama-3.3-70b-versatile` |
 | `MAX_UPLOAD_MB` | Optional | Backend file size limit, defaults to `8` |
 | `SMART_HIRE_SEED_DEMO` | Optional | Seeds demo data when set to `1` |
@@ -292,8 +289,10 @@ Example frontend env file:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-backend.example.com
-GEMINI_API_KEY=your-gemini-key
-GEMINI_MODEL=gemini-2.5-flash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=replace-me
+GROQ_API_KEY=replace-me
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 Example backend env file:
@@ -354,14 +353,12 @@ Useful frontend scripts:
 
 ### Backend deployment
 
-The backend is designed for Railway or a similar Node host.
+The backend is served through the Express app and the frontend routes are deployed on Vercel.
 
-- Set the root directory to `backend`.
-- Use `npm start` as the start command.
+- Set the root directory to `backend` for local or host-based Express deployments.
+- Use `npm start` as the backend start command.
 - Keep Node 20 available if your host lets you choose the runtime.
 - Set the backend env vars from the table above.
-
-The repository includes `backend/Procfile` and `backend/nixpacks.toml` to support that setup.
 
 ### Frontend deployment
 
@@ -369,7 +366,7 @@ The frontend is designed for Vercel.
 
 - Set the root directory to `frontend`.
 - Set `NEXT_PUBLIC_API_URL` to the deployed backend URL.
-- Set `GEMINI_API_KEY` if you want the Next.js AI routes to use Gemini.
+- Set `GROQ_API_KEY` if you want the Next.js AI routes to use Groq.
 - Add the deployed frontend domain to backend `CORS_ORIGINS`.
 
 The repository also includes `frontend/middleware.js` so the protected routes redirect to `/login` when a user is not signed in.
@@ -413,7 +410,7 @@ The previously broken batch upload flow has been fixed in the codebase. The batc
 If anything still appears broken on the deployed link, the most likely causes are configuration issues rather than a code-path blocker:
 
 - Missing or incorrect `NEXT_PUBLIC_API_URL`
-- Missing `GEMINI_API_KEY` on Vercel
+- Missing `GROQ_API_KEY` on Vercel
 - Missing backend `JWT_SECRET`, `SUPABASE_URL`, or `SUPABASE_SERVICE_ROLE_KEY`
 - Backend `CORS_ORIGINS` not including the deployed frontend domain
 - A stale production deployment that has not picked up the latest commit
@@ -421,7 +418,7 @@ If anything still appears broken on the deployed link, the most likely causes ar
 ## Interview Talking Points
 
 - The frontend and backend are deployed separately, which keeps the product scalable and easier to debug.
-- The app uses graceful degradation: Groq, Gemini, and deterministic fallbacks are all supported where appropriate.
+- The app uses graceful degradation: Groq and deterministic fallbacks are supported where appropriate.
 - `frontend/app/api/[...path]/route.js` acts as a generic proxy so the UI can still reach the Express backend without hardcoding every route.
 - The batch upload fix is a good example of contract alignment: the UI, the API route, and the tests now all agree on one multipart multi-file request shape.
 - The history layer is intentionally browser-local, which makes the app usable even when backend persistence is unavailable.

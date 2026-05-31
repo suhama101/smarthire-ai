@@ -19,7 +19,7 @@ describe('DashboardPage', () => {
   test('shows the recruiter batch-only message', async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByText('Use Batch Upload to analyze multiple candidates at once.')).toBeInTheDocument();
+    expect(await screen.findByText('Use Batch Upload to screen multiple candidates at once.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Go to Batch Upload' })).toHaveAttribute('href', '/batch');
     expect(screen.queryByText('Resume Upload')).not.toBeInTheDocument();
     expect(screen.queryByText('Job Match')).not.toBeInTheDocument();

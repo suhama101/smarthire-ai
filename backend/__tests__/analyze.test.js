@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
+process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || 'test_groq_key';
+
 jest.mock('../services/db', () => ({
   saveAnalysis: jest.fn(),
   getAnalysisById: jest.fn(),
@@ -11,11 +14,11 @@ jest.mock('../services/db', () => ({
   seedDemoDataIfEmpty: jest.fn(),
 }));
 
-jest.mock('../services/claudeService', () => ({
+jest.mock('../services/groqService', () => ({
   extractResumeData: jest.fn(),
   matchJobDescription: jest.fn(),
   generateLearningPlan: jest.fn(),
-  isAnthropicConfigured: jest.fn(() => false),
+  isGroqConfigured: jest.fn(() => false),
   isMeaningfulJobDescription: jest.fn(() => true),
 }));
 
@@ -30,7 +33,7 @@ jest.mock('../services/resumeParser', () => {
 });
 
 const { saveAnalysis, getAnalysisById, saveJobMatch } = require('../services/db');
-const { extractResumeData, matchJobDescription, generateLearningPlan } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, generateLearningPlan } = require('../services/groqService');
 const { extractTextFromFile } = require('../services/resumeParser');
 const app = require('../server');
 

@@ -2,9 +2,13 @@ const request = require('supertest');
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalCorsOrigins = process.env.CORS_ORIGINS;
+const originalJwtSecret = process.env.JWT_SECRET;
+const originalGroqApiKey = process.env.GROQ_API_KEY;
 
 process.env.NODE_ENV = 'production';
 process.env.CORS_ORIGINS = 'https://custom-domain.com';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
+process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || 'test_groq_key';
 
 const app = require('../server');
 
@@ -12,6 +16,8 @@ describe('CORS configuration', () => {
   afterAll(() => {
     process.env.NODE_ENV = originalNodeEnv;
     process.env.CORS_ORIGINS = originalCorsOrigins;
+    process.env.JWT_SECRET = originalJwtSecret;
+    process.env.GROQ_API_KEY = originalGroqApiKey;
   });
 
   test('allows explicitly allowlisted origins', async () => {

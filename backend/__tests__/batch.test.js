@@ -1,6 +1,9 @@
 const request = require('supertest');
 
-jest.mock('../services/claudeService', () => ({
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
+process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || 'test_groq_key';
+
+jest.mock('../services/groqService', () => ({
   extractResumeData: jest.fn(async (text) => ({
     name: String(text || '').includes('Alice') ? 'Alice Johnson' : 'Bob Smith',
     technicalSkills: ['React', 'Node.js'],
@@ -12,7 +15,7 @@ jest.mock('../services/claudeService', () => ({
     overallScore: resumeData.name === 'Alice Johnson' ? 92 : 81,
     matchedSkills: resumeData.name === 'Alice Johnson' ? ['React', 'Node.js'] : ['React'],
   })),
-  isAnthropicConfigured: jest.fn(() => false),
+  isGroqConfigured: jest.fn(() => false),
 }));
 
 const app = require('../server');

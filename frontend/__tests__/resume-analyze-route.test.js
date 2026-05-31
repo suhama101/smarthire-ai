@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { generateGeminiContent } from '../src/lib/gemini-model';
+import { analyzeWithGroq } from '../src/lib/groqClient';
 import { checkRateLimit } from '../src/lib/rate-limit';
 import { POST } from '../app/api/resume/analyze/route';
 
@@ -42,8 +42,8 @@ jest.mock('next/server', () => ({
   },
 }));
 
-jest.mock('../src/lib/gemini-model', () => ({
-  generateGeminiContent: jest.fn(),
+jest.mock('../src/lib/groqClient', () => ({
+  analyzeWithGroq: jest.fn(),
 }));
 
 jest.mock('../src/lib/rate-limit', () => ({
@@ -55,25 +55,21 @@ describe('resume analyze route', () => {
     jest.clearAllMocks();
     pdfParserReadyHandler = null;
     pdfParserErrorHandler = null;
-    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.GROQ_API_KEY = 'test-key';
     checkRateLimit.mockReturnValue({ limited: false });
     getRawTextContentMock.mockReturnValue('Senior frontend engineer with React and TypeScript experience.');
-    generateGeminiContent.mockResolvedValue({
-      response: {
-        text: () => JSON.stringify({
-          name: 'Amina Khan',
-          email: 'amina@example.com',
-          skills: ['React'],
-          experience: [],
-          education: [],
-          summary: 'Experienced frontend engineer.',
-        }),
-      },
-    });
+    analyzeWithGroq.mockResolvedValue(JSON.stringify({
+      name: 'Amina Khan',
+      email: 'amina@example.com',
+      skills: ['React'],
+      experience: [],
+      education: [],
+      summary: 'Experienced frontend engineer.',
+    }));
   });
 
   afterEach(() => {
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.GROQ_API_KEY;
   });
 
   function createPdfRequest(fileContent) {
@@ -96,14 +92,14 @@ describe('resume analyze route', () => {
     };
   }
 
-  test('extracts full PDF text and sends it to Gemini', async () => {
+  test('extracts full PDF text and sends it to Groq', async () => {
     const response = await POST(createPdfRequest('%PDF-1.4 mocked content'));
     const payload = await response.json();
 
     expect(response.status).toBe(200);
     expect(parseBufferMock).toHaveBeenCalledTimes(1);
-    expect(generateGeminiContent).toHaveBeenCalledTimes(1);
-    expect(String(generateGeminiContent.mock.calls[0][1][0])).toContain('Senior frontend engineer with React and TypeScript experience.');
+    expect(analyzeWithGroq).toHaveBeenCalledTimes(1);
+    expect(String(analyzeWithGroq.mock.calls[0][0])).toContain('Senior frontend engineer with React and TypeScript experience.');
     expect(payload.resumeText).toBe('Senior frontend engineer with React and TypeScript experience.');
     expect(payload.resumeData.name).toBe('Amina Khan');
   });
@@ -116,6 +112,6 @@ describe('resume analyze route', () => {
 
     expect(response.status).toBe(400);
     expect(payload.error).toBe('Could not extract text from PDF. Please try a text-based PDF.');
-    expect(generateGeminiContent).not.toHaveBeenCalled();
+    expect(analyzeWithGroq).not.toHaveBeenCalled();
   });
 });

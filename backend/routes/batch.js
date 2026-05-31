@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const { uploadBatch } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
-const { extractResumeData, matchJobDescription, isAnthropicConfigured } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, isGroqConfigured } = require('../services/groqService');
 const { saveBatchRun } = require('../services/db');
 
 const router = express.Router();
@@ -118,7 +118,7 @@ router.post('/analyze', async (req, res, next) => {
     fileCount: files.length,
     jobDescriptionLength: jobDescription.length,
     jobDescriptionPreview: previewText(jobDescription, 3000),
-    aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
+    aiMode: isGroqConfigured() ? 'groq' : 'fallback',
   });
 
   const rankedCandidates = [];

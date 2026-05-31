@@ -1,7 +1,7 @@
 const express = require('express');
 const { upload } = require('../middleware/upload');
 const { extractTextFromFile, cleanText, deleteFile } = require('../services/resumeParser');
-const { extractResumeData, matchJobDescription, generateLearningPlan, isAnthropicConfigured, isMeaningfulJobDescription } = require('../services/claudeService');
+const { extractResumeData, matchJobDescription, generateLearningPlan, isGroqConfigured, isMeaningfulJobDescription } = require('../services/groqService');
 const { saveAnalysis, getAnalysisById, saveJobMatch, deleteAnalysisById, deleteJobMatchById } = require('../services/db');
 
 const router = express.Router();
@@ -25,7 +25,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/analyze/resume
-// Upload and analyze a resume with Claude AI
+// Upload and analyze a resume with Groq AI
 router.post('/resume', upload.single('resume'), async (req, res, next) => {
   let filePath = null;
   const userId = req.user?.id || DEFAULT_USER_ID;
@@ -41,7 +41,7 @@ router.post('/resume', upload.single('resume'), async (req, res, next) => {
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
+      aiMode: isGroqConfigured() ? 'groq' : 'fallback',
     });
 
     const rawText = await extractTextFromFile(filePath, req.file.mimetype);
@@ -75,7 +75,7 @@ router.post('/resume', upload.single('resume'), async (req, res, next) => {
       resumeData,
       resumeText: analysis.raw_text || cleanedText,
       createdAt: analysis.created_at,
-      dataSource: isAnthropicConfigured() ? 'claude' : 'fallback',
+      dataSource: isGroqConfigured() ? 'groq' : 'fallback',
     });
   } catch (err) {
     if (filePath) deleteFile(filePath);
@@ -120,7 +120,7 @@ router.post('/match', async (req, res, next) => {
       companyName,
       jobDescriptionLength: trimmedJobDescription.length,
       jobDescriptionPreview: previewText(trimmedJobDescription, 3000),
-      aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
+      aiMode: isGroqConfigured() ? 'groq' : 'fallback',
     });
 
     // Get the resume analysis
@@ -146,7 +146,7 @@ router.post('/match', async (req, res, next) => {
       matchId: jobMatch.id,
       matchResult,
       createdAt: jobMatch.created_at,
-      dataSource: isAnthropicConfigured() ? 'claude' : 'fallback',
+      dataSource: isGroqConfigured() ? 'groq' : 'fallback',
     });
   } catch (err) {
     if (err?.status) {
@@ -177,7 +177,7 @@ router.post('/learning-plan', async (req, res, next) => {
       missingSkills,
       targetRole,
       yearsExperience,
-      aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
+      aiMode: isGroqConfigured() ? 'groq' : 'fallback',
     });
 
     const learningPlan = await generateLearningPlan(
@@ -189,7 +189,7 @@ router.post('/learning-plan', async (req, res, next) => {
     res.json({
       message: 'Learning plan generated!',
       learningPlan,
-      dataSource: isAnthropicConfigured() ? 'claude' : 'fallback',
+      dataSource: isGroqConfigured() ? 'groq' : 'fallback',
     });
   } catch (err) {
     if (err?.status) {

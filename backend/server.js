@@ -11,9 +11,17 @@ const analyzeRoutes = require('./routes/analyze');
 const batchRoutes = require('./routes/batch');
 const debugRoutes = require('./routes/debug');
 
-const { isAnthropicConfigured } = require('./services/claudeService');
+const { isGroqConfigured } = require('./services/groqService');
 
 const { seedDemoDataIfEmpty } = require('./services/db');
+
+const REQUIRED_ENV_VARS = ['JWT_SECRET', 'GROQ_API_KEY'];
+const missing = REQUIRED_ENV_VARS.filter((variable) => !process.env[variable]);
+
+if (missing.length > 0) {
+	console.error('Missing required environment variables:', missing.join(', '));
+	process.exit(1);
+}
 
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -239,7 +247,7 @@ if (require.main === module) {
 
 
 
-	if (!isAnthropicConfigured()) {
+	if (!isGroqConfigured()) {
 
 		console.warn('GROQ_API_KEY is missing or empty. SmartHire AI will use fallback heuristics until Groq is configured.');
 

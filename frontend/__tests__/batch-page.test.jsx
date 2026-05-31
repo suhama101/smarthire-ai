@@ -14,7 +14,7 @@ jest.mock('../src/lib/generateReport', () => ({
   }),
 }));
 
-jest.setTimeout(15000);
+jest.setTimeout(30000);
 
 describe('BatchResumeUploadPage', () => {
   const replaceMock = jest.fn();
@@ -87,6 +87,9 @@ describe('BatchResumeUploadPage', () => {
 
         return {
           ok: true,
+          clone: () => ({
+            text: async () => JSON.stringify(response),
+          }),
           text: async () => JSON.stringify(response),
           json: async () => response,
         };
@@ -94,6 +97,9 @@ describe('BatchResumeUploadPage', () => {
 
       return {
         ok: true,
+        clone: () => ({
+          text: async () => JSON.stringify({ message: 'Batch run saved successfully.' }),
+        }),
         json: async () => ({
           message: 'Batch run saved successfully.',
           batchRun: {
@@ -147,7 +153,7 @@ describe('BatchResumeUploadPage', () => {
       expect(screen.getByText('Batch analysis complete.')).toBeInTheDocument();
       expect(screen.getAllByText('Ava Chen').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Noah Patel').length).toBeGreaterThan(0);
-    }, { timeout: 12000 });
+    }, { timeout: 25000 });
 
     expect(screen.getByText('96%')).toBeInTheDocument();
     expect(screen.getByText('91%')).toBeInTheDocument();

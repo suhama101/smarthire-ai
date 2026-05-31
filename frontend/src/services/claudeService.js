@@ -81,10 +81,10 @@ const JOB_DESCRIPTION_MEANINGFUL_TERMS = new Set([
   'communication',
 ]);
 
-class ClaudeIntegrationError extends Error {
+class GroqIntegrationError extends Error {
   constructor(message, status = 502) {
     super(message);
-    this.name = 'ClaudeIntegrationError';
+    this.name = 'GroqIntegrationError';
     this.status = status;
   }
 }
@@ -255,7 +255,7 @@ function buildFallbackMatchResult(resumeData, jobDescription) {
   };
 }
 
-function getModelText(input) {
+function getGroqText(input) {
   // Accept either a raw text string (from Groq) or a response-like object
   if (typeof input === 'string') {
     return String(input || '').trim();
@@ -280,11 +280,11 @@ function getModelText(input) {
   return textChunks.join('\n').trim();
 }
 
-function parseModelJsonOrThrow(rawText) {
+function parseGroqJsonOrThrow(rawText) {
   const text = String(rawText || '').replace(/```json|```/gi, '').trim();
 
   if (!text) {
-    throw new ClaudeIntegrationError('Model returned an empty response', 502);
+    throw new GroqIntegrationError('Groq returned an empty response', 502);
   }
 
   try {
@@ -292,7 +292,7 @@ function parseModelJsonOrThrow(rawText) {
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) {
-      throw new ClaudeIntegrationError('Model response did not contain JSON', 502);
+      throw new GroqIntegrationError('Groq response did not contain JSON', 502);
     }
     return JSON.parse(match[0]);
   }
@@ -637,8 +637,8 @@ function parseModelJsonOrFallback(response, options) {
   const { flowName, fallbackFactory } = options;
 
   try {
-    const raw = parseGeminiJson(response);
-    const text = getGeminiText(response);
+    const raw = parseGroqJsonOrThrow(response);
+    const text = getGroqText(response);
     const clean = String(text || '').replace(/```json|```/gi, '').trim();
 
     if (clean && (clean.startsWith('{') || clean.endsWith('}'))) {
@@ -661,31 +661,31 @@ function parseModelJsonOrFallback(response, options) {
 
 function validateResumeDataShape(data) {
   if (!data.summary || data.summary.length < 10) {
-    throw new ClaudeIntegrationError('Gemini response is missing a valid summary', 502);
+    throw new GroqIntegrationError('Groq response is missing a valid summary', 502);
   }
 
   if (!Array.isArray(data.technicalSkills) || data.technicalSkills.length === 0) {
-    throw new ClaudeIntegrationError('Gemini response is missing technical skills', 502);
+    throw new GroqIntegrationError('Groq response is missing technical skills', 502);
   }
 }
 
-function mapAnthropicError(err) {
-  if (err instanceof ClaudeIntegrationError) {
+function mapGroqError(err) {
+  if (err instanceof GroqIntegrationError) {
     return err;
   }
 
   const status = Number(err?.status || err?.response?.status) || 502;
   const message = err?.message || 'Groq request failed';
-  return new ClaudeIntegrationError(message, status);
+  return new GroqIntegrationError(message, status);
 }
 
 /**
  * Extract structured skills and profile from raw resume text
  */
 export async function extractResumeData(resumeText) {
-  if (!isGeminiConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Resume analysis using fallback mode', {
-      reason: 'GEMINI_API_KEY is missing or empty',
+      reason: 'GROQ_API_KEY is missing or empty',
       resumeLength: String(resumeText || '').length,
     });
     return buildFallbackResumeData(resumeText);
@@ -745,12 +745,12 @@ ${promptResumeText}`;
     const responseText = await analyzeWithGroq(`You are a deterministic resume parser. Return exactly one JSON object matching the requested schema, based only on provided evidence, with no hallucinations.\n\n${prompt}`);
 
     logAiDebug('Resume Groq raw response', {
-      text: getModelText(responseText),
+      text: getGroqText(responseText),
     });
 
     let parsedResume;
     try {
-      parsedResume = parseModelJsonOrThrow(getModelText(responseText));
+      parsedResume = parseGroqJsonOrThrow(getGroqText(responseText));
     } catch (err) {
       parsedResume = buildFallbackResumeData(resumeText);
     }
@@ -760,7 +760,7 @@ ${promptResumeText}`;
     logAiDebug('Resume analysis parsed result', normalized);
     return normalized;
   } catch (err) {
-    throw mapAnthropicError(err);
+    throw mapGroqError(err);
   }
 }
 
@@ -770,9 +770,9 @@ ${promptResumeText}`;
 export async function matchJobDescription(resumeData, jobDescription, jobTitle = 'Unknown') {
   const fallbackMatch = buildFallbackMatchResult(resumeData, jobDescription);
 
-  if (!isGeminiConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Job matching using fallback mode', {
-      reason: 'GEMINI_API_KEY is missing or empty',
+      reason: 'GROQ_API_KEY is missing or empty',
       jobDescriptionLength: String(jobDescription || '').length,
     });
     return fallbackMatch;
@@ -829,12 +829,12 @@ Return this exact JSON:
     const responseText = await analyzeWithGroq(`You are a strict technical recruiter evaluator. Produce evidence-based scoring and return exactly one JSON object in the requested schema.\n\n${prompt}`);
 
     logAiDebug('Match Groq raw response', {
-      text: getModelText(responseText),
+      text: getGroqText(responseText),
     });
 
     let parsed;
     try {
-      parsed = parseModelJsonOrThrow(getModelText(responseText));
+      parsed = parseGroqJsonOrThrow(getGroqText(responseText));
     } catch (err) {
       parsed = fallbackMatch;
     }
@@ -865,9 +865,9 @@ Return this exact JSON:
  * Generate a personalized learning plan to close skills gaps
  */
 export async function generateLearningPlan(missingSkills, targetRole, currentLevel) {
-  if (!isGeminiConfigured()) {
+  if (!isGroqConfigured()) {
     logAiDebug('Learning plan using fallback mode', {
-      reason: 'GEMINI_API_KEY is missing or empty',
+      reason: 'GROQ_API_KEY is missing or empty',
       missingSkills,
       targetRole,
       currentLevel,
@@ -926,13 +926,13 @@ Return JSON with exactly this structure:
     const responseText = await analyzeWithGroq(`You are a pragmatic engineering mentor. Produce a grounded, role-aligned learning plan and return exactly one JSON object in the requested schema.\n\n${prompt}`);
 
     logAiDebug('Learning plan Groq raw response', {
-      text: getModelText(responseText),
+      text: getGroqText(responseText),
     });
 
     const fallbackPlan = buildFallbackLearningPlan(missingSkills, targetRole, currentLevel);
     let parsed;
     try {
-      parsed = parseModelJsonOrThrow(getModelText(responseText));
+      parsed = parseGroqJsonOrThrow(getGroqText(responseText));
     } catch (err) {
       parsed = fallbackPlan;
     }
@@ -940,8 +940,8 @@ Return JSON with exactly this structure:
     logAiDebug('Learning plan parsed result', normalized);
     return normalized;
   } catch (err) {
-    throw mapAnthropicError(err);
+    throw mapGroqError(err);
   }
 }
 
-export { isGroqConfigured, isGroqConfigured as isAnthropicConfigured, isMeaningfulJobDescription };
+export { isGroqConfigured, isMeaningfulJobDescription };

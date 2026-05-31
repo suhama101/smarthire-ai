@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { cleanText, deleteFile, extractTextFromFile } from '../../../../src/services/resumeParser.js';
-import { extractResumeData, matchJobDescription, isAnthropicConfigured } from '../../../../src/services/claudeService.js';
+import { extractResumeData, matchJobDescription, isGroqConfigured } from '../../../../src/services/groqService.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -302,7 +302,7 @@ export async function POST(request) {
       fileCount: uploads.length,
       jobDescriptionLength: jobDescription.length,
       jobDescriptionPreview: previewText(jobDescription, 3000),
-      aiMode: isAnthropicConfigured() ? 'claude' : 'fallback',
+      aiMode: isGroqConfigured() ? 'groq' : 'fallback',
       companyName,
       jobTitle,
     });

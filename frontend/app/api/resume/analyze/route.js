@@ -1,6 +1,6 @@
 // REQUIRED ENV VAR: GROQ_API_KEY
 // Add this in Vercel Dashboard -> Project -> Settings -> Environment Variables
-// Value: your Gemini API key from https://aistudio.google.com/apikey
+// Value: your Groq API key from https://console.groq.com/
 
 import { NextResponse } from 'next/server';
 import Busboy from 'busboy';
@@ -245,13 +245,20 @@ Return this exact JSON with ALL fields filled:
   return analysisPrompt;
 }
 
-function cleanGeminiJsonResponse(rawText) {
-  return String(rawText || '')
-    .replace(/```json/gi, '')
-    .replace(/```/gi, '')
-    .replace(/^[^{]*/, '')
-    .replace(/[^}]*$/, '')
-    .trim();
+function extractJSON(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const match = String(raw || '').match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        throw new Error('Failed to parse AI response as JSON');
+      }
+    }
+    throw new Error('No JSON found in AI response');
+  }
 }
 
 function mapChunkedAnalysisToResponse(parsed) {
@@ -620,23 +627,7 @@ async function analyzeResumeWithGroq(resumeText) {
   }
 
   const rawResponse = await analyzeWithGroq(buildAnalysisPrompt(localResumeText));
-  const raw = String(rawResponse || '');
-  const firstBrace = raw.indexOf("{");
-  const lastBrace = raw.lastIndexOf("}");
-  const cleaned = raw.substring(firstBrace, lastBrace + 1);
-
-  let parsed;
-
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (error) {
-    console.error("Parse failed:", error.message);
-    console.error("Raw response:", raw.substring(0, 500));
-    return NextResponse.json({
-      success: false,
-      error: "Could not parse resume. Please try again."
-    }, { status: 422 });
-  }
+  const parsed = extractJSON(String(rawResponse || ''));
 
   parsed.overallScore = Number(parsed.overallScore) || 0;
   parsed.technicalSkills = parsed.technicalSkills || [];
@@ -700,10 +691,6 @@ export async function POST(request) {
 
     const markdownResume = await convertToMarkdown(extractedText);
     const analysis = await analyzeResumeWithGroq(extractedText);
-
-    if (analysis instanceof Response) {
-      return analysis;
-    }
 
     const resumeData = mapAnalysisToResumeData(analysis);
     let analysisId = null;

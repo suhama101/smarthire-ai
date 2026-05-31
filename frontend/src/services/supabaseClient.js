@@ -32,20 +32,12 @@ WHAT WILL CAUSE ISSUES:
 FOR RESUME UPLOADS:
 - Single resume: No limit, works every time
 - Batch upload: No limit on number of files
-- The ONLY limit is Gemini API (20-1500 req/day)
-  not Supabase
 
-GEMINI API LIMITS (Real bottleneck):
-- gemini-2.5-flash: 20 requests/DAY (too low!)
-- gemini-2.0-flash-lite: 1500 requests/DAY (good)
-- gemini-1.5-flash: 1500 requests/DAY (good)
-- FIX: Make sure GEMINI_MODEL=gemini-2.0-flash-lite 
-  in Vercel environment variables
+API bottlenecks are determined by the configured model and backend limits, not Supabase.
 
 SUMMARY:
 - Supabase will NOT be the problem for normal usage
-- Gemini API quota is the main thing to watch
-- If app stops working, check Gemini key first
+- If app stops working, check Supabase credentials and backend environment variables first
 */
 
 import { createClient } from '@supabase/supabase-js';
