@@ -4,6 +4,10 @@ function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
 }
 
+function createResetTokenId() {
+  return createId('resettoken');
+}
+
 function mapSupabaseError(error, fallbackMessage) {
   if (!error) {
     return null;
@@ -100,6 +104,58 @@ export async function saveJobMatch(analysisId, userId, jobTitle, companyName, jo
   const mappedError = mapSupabaseError(error, 'Failed to save job match.');
   if (mappedError) {
     throw mappedError;
+  }
+
+  return data;
+}
+
+export async function saveResetToken(userId, token, expiresAt) {
+  const supabase = getSupabaseClient();
+  const resetToken = {
+    id: createResetTokenId(),
+    user_id: userId,
+    token,
+    expires_at: new Date(expiresAt).toISOString(),
+    used: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .insert(resetToken)
+    .select('*')
+    .single();
+
+  const mappedError = mapSupabaseError(error, 'Failed to save reset token.');
+  if (mappedError) {
+    throw mappedError;
+  }
+
+  return data;
+}
+
+export async function getResetToken(token) {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .select('*')
+    .eq('token', token)
+    .eq('used', false)
+    .maybeSingle();
+
+  const mappedError = mapSupabaseError(error, 'Failed to fetch reset token.');
+  if (mappedError) {
+    throw mappedError;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const expiresAt = new Date(data.expires_at).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return null;
   }
 
   return data;

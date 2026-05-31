@@ -1,27 +1,40 @@
 import { NextResponse } from 'next/server';
+import { randomBytes } from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').trim().replace(/\/$/, '');
+import { saveResetToken } from '@/services/db';
+import { sendPasswordResetEmail } from '@/services/emailService';
+import { createClient } from '@/lib/supabaseClient';
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
+  const email = String(body?.email || '').trim();
 
-  const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  if (!email) {
+    return NextResponse.json({ message: 'If that email exists, a reset link has been sent.' });
+  }
 
-  const text = await response.text();
-  return new NextResponse(text, {
-    status: response.status,
-    headers: {
-      'Content-Type': response.headers.get('content-type') || 'application/json',
-    },
-  });
+  const supabase = createClient();
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, email')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (user) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await saveResetToken(user.id, token, expiresAt);
+
+    try {
+      await sendPasswordResetEmail(email, `https://smarthire-ai-lrq8.vercel.app/reset-password?token=${encodeURIComponent(token)}`);
+    } catch (error) {
+      console.error('Password reset email failed:', error);
+    }
+  }
+
+  return NextResponse.json({ message: 'If that email exists, a reset link has been sent.' });
 }

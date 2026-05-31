@@ -1,1 +1,1 @@
-export { getSupabaseClient } from '../services/supabaseClient.js';
+export { getSupabaseClient, getSupabaseClient as createClient } from '../services/supabaseClient.js';
