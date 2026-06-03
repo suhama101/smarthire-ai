@@ -8,6 +8,74 @@ export const maxDuration = 60;
 import { getResetToken, updateUserPassword } from '@/services/db';
 import { createClient } from '@/lib/supabaseClient';
 
+async function findAuthUserByEmail(supabase, email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  if (!normalizedEmail || !supabase?.auth?.admin?.listUsers) {
+    return null;
+  }
+
+  let page = 1;
+  const perPage = 1000;
+
+  while (page <= 10) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+
+    if (error) {
+      throw error;
+    }
+
+    const users = data?.users || [];
+    const match = users.find((user) => String(user?.email || '').trim().toLowerCase() === normalizedEmail);
+
+    if (match) {
+      return match;
+    }
+
+    if (users.length < perPage) {
+      return null;
+    }
+
+    page += 1;
+  }
+
+  return null;
+}
+
+async function updateSupabaseAuthPassword(supabase, userId, email, newPassword) {
+  if (!supabase?.auth?.admin?.updateUserById) {
+    return { updated: false, reason: 'Supabase Auth admin API is unavailable.' };
+  }
+
+  const { error: directUpdateError } = await supabase.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+
+  if (!directUpdateError) {
+    return { updated: true };
+  }
+
+  const authUser = await findAuthUserByEmail(supabase, email);
+
+  if (!authUser?.id) {
+    return {
+      updated: false,
+      reason: `No Supabase Auth user found for ${email}.`,
+      directUpdateError,
+    };
+  }
+
+  const { error: emailUpdateError } = await supabase.auth.admin.updateUserById(authUser.id, {
+    password: newPassword,
+  });
+
+  if (emailUpdateError) {
+    throw emailUpdateError;
+  }
+
+  return { updated: true, authUserId: authUser.id };
+}
+
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const token = String(body?.token || '').trim();
@@ -20,6 +88,10 @@ export async function POST(request) {
 
   if (!token || !newPassword) {
     return NextResponse.json({ error: 'Token and new password are required.' }, { status: 400 });
+  }
+
+  if (newPassword.length < 6) {
+    return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 });
   }
 
   let resetToken;
@@ -50,6 +122,23 @@ export async function POST(request) {
     console.log('[reset-password] before password update', { userId: resetToken.userId });
     const updatedUser = await updateUserPassword(resetToken.userId, hashedPassword);
     console.log('[reset-password] after password update', { userId: updatedUser.id, email: updatedUser.email });
+
+    console.log('[reset-password] updating Supabase Auth password', { userId: updatedUser.id, email: updatedUser.email });
+    const authUpdate = await updateSupabaseAuthPassword(supabase, updatedUser.id, updatedUser.email, newPassword);
+
+    if (!authUpdate.updated) {
+      console.warn('[reset-password] Supabase Auth password was not updated', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        reason: authUpdate.reason,
+        directUpdateError: authUpdate.directUpdateError?.message,
+      });
+    } else {
+      console.log('[reset-password] Supabase Auth password updated', {
+        userId: updatedUser.id,
+        authUserId: authUpdate.authUserId || updatedUser.id,
+      });
+    }
 
     console.log('[reset-password] marking token as used', { tokenPreview: `${token.slice(0, 8)}...` });
     const { error: tokenUpdateError } = await supabase
