@@ -3,25 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-let browserSupabaseClient = null;
-
-function getSupabaseClient() {
-  if (browserSupabaseClient) {
-    return browserSupabaseClient;
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase browser credentials are not configured.');
-  }
-
-  browserSupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-  return browserSupabaseClient;
-}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -31,60 +12,15 @@ export default function ResetPasswordPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [token, setToken] = useState('');
-  const [hasRecoverySession, setHasRecoverySession] = useState(false);
 
   useEffect(() => {
-    let subscription;
     const params = new URLSearchParams(window.location.search);
     const resetToken = params.get('token') || '';
-    const code = params.get('code') || '';
     setToken(resetToken);
 
-    async function prepareRecoverySession() {
-      try {
-        const supabase = getSupabaseClient();
-
-        if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-          if (exchangeError) {
-            throw exchangeError;
-          }
-        }
-
-        const { data: sessionData } = await supabase.auth.getSession();
-
-        if (sessionData?.session?.access_token) {
-          setHasRecoverySession(true);
-          setError('');
-        } else if (!resetToken) {
-          setError('Reset token is missing. Open the link from your email again.');
-        }
-
-        const authListener = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === 'PASSWORD_RECOVERY' || session?.access_token) {
-            setHasRecoverySession(true);
-            setError('');
-          }
-        });
-
-        subscription = authListener?.data?.subscription;
-      } catch (sessionError) {
-        if (!resetToken) {
-          setError(sessionError?.message || 'Reset token is missing. Open the link from your email again.');
-        }
-      }
-    }
-
-    prepareRecoverySession();
-
-    if (!resetToken && !code) {
+    if (!resetToken) {
       setError('Reset token is missing. Open the link from your email again.');
     }
-
-    return () => {
-      subscription?.unsubscribe?.();
-    };
   }, []);
 
   async function handleSubmit(event) {
@@ -111,53 +47,17 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    if (!token) {
+      setError('Reset token is missing. Open the link from your email again.');
+      setMessage('');
+      return;
+    }
+
     setBusy(true);
     setError('');
     setMessage('');
 
     try {
-      if (hasRecoverySession) {
-        const supabase = getSupabaseClient();
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: trimmedNewPassword,
-        });
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        const { data: sessionData } = await supabase.auth.getSession();
-        const accessToken = sessionData?.session?.access_token;
-
-        const syncResponse = await fetch('/api/auth/sync-password', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken || ''}`,
-          },
-          body: JSON.stringify({ newPassword: trimmedNewPassword }),
-        });
-
-        const syncData = await syncResponse.json().catch(() => ({}));
-
-        if (!syncResponse.ok) {
-          throw new Error(syncData?.error || 'Unable to sync password.');
-        }
-
-        setMessage('Password updated! Redirecting to login...');
-        await supabase.auth.signOut();
-        window.setTimeout(() => {
-          router.push('/login');
-        }, 2000);
-        return;
-      }
-
-      if (!token) {
-        setError('Reset token is missing. Open the link from your email again.');
-        setMessage('');
-        return;
-      }
-
       const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: {
@@ -173,9 +73,7 @@ export default function ResetPasswordPage() {
       }
 
       setMessage('Password updated! Redirecting to login...');
-      window.setTimeout(() => {
-        router.push('/login');
-      }, 2000);
+      router.push('/login');
     } catch (submitError) {
       setError(submitError?.message || 'Unable to update password.');
     } finally {
