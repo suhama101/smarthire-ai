@@ -3,22 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-let supabaseClient = null;
-
-function getSupabaseClient() {
-  if (supabaseClient) {
-    return supabaseClient;
-  }
-
-  supabaseClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-
-  return supabaseClient;
-}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -32,34 +16,11 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const resetToken = params.get('token') || '';
-    const code = params.get('code') || '';
     setToken(resetToken);
 
-    async function prepareSession() {
-      try {
-        const supabase = getSupabaseClient();
-
-        if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-          if (exchangeError) {
-            throw exchangeError;
-          }
-        }
-
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session?.access_token && !resetToken) {
-          setError('Reset session is missing. Open the link from your email again.');
-        }
-      } catch (sessionError) {
-        if (!resetToken) {
-          setError(sessionError?.message || 'Reset session is missing. Open the link from your email again.');
-        }
-      }
+    if (!resetToken) {
+      setError('Reset token is missing. Open the link from your email again.');
     }
-
-    prepareSession();
   }, []);
 
   async function handleSubmit(event) {
@@ -86,44 +47,17 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    if (!token) {
+      setError('Reset token is missing. Open the link from your email again.');
+      setMessage('');
+      return;
+    }
+
     setBusy(true);
     setError('');
     setMessage('');
 
     try {
-      const supabase = getSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.access_token) {
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: trimmedNewPassword,
-        });
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        await fetch('/api/auth/sync-password', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token || ''}`,
-          },
-          body: JSON.stringify({ newPassword: trimmedNewPassword }),
-        });
-
-        setMessage('Password updated! Redirecting to login...');
-        await supabase.auth.signOut();
-        setTimeout(() => router.push('/login'), 2000);
-        return;
-      }
-
-      if (!token) {
-        setError('Reset session is missing. Open the link from your email again.');
-        setMessage('');
-        return;
-      }
-
       const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: {
@@ -139,7 +73,7 @@ export default function ResetPasswordPage() {
       }
 
       setMessage('Password updated! Redirecting to login...');
-      setTimeout(() => router.push('/login'), 2000);
+      router.push('/login');
     } catch (submitError) {
       setError(submitError?.message || 'Unable to update password.');
     } finally {
