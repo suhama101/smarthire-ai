@@ -110,7 +110,7 @@ This document explains what SmartHire AI does, how it works, its features, tech 
 - `SUPABASE_SERVICE_ROLE_KEY` (backend/services/supabaseClient.js, frontend/app/api/resume/analyze/route.js) — Supabase service role key used server-side for writes.
 - `SUPABASE_ANON_KEY` (backend/services/supabaseClient.js) — optional anon key fallback.
 - `GROQ_API_KEY` (frontend/src/lib/groqClient.js, backend/services/groqService.js, frontend/API routes) — API key for Groq model. If missing, the app uses deterministic fallbacks.
-- `GROQ_MODEL` (frontend/src/lib/groqClient.js, backend/services/groqService.js) — model identifier to call (e.g., `llama-3.1-8b-instant` or `llama-3.3-70b-versatile`).
+- `GROQ_MODEL` (frontend/src/lib/groqClient.js, backend/services/groqService.js) — model identifier to call (e.g., `llama-3.3-70b-versatile`).
 - `API_URL` / `BACKEND_API_URL` / `NEXT_PUBLIC_API_URL` (frontend/app/api/[...path]/route.js, frontend/.env.example) — URL of separate backend server used by proxy routes.
 - `PORT` (backend/server.js) — backend server port.
 - `NODE_ENV` (many files) — production/test behavior branches.
